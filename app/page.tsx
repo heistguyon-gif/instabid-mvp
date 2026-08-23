@@ -19,57 +19,61 @@ type BoardItem = {
 
 const fallbackBoards: Record<Market, BoardItem[]> = {
   br: [
-    { id: 'br-nexoflow', rank: 1, name: 'NexoFlow', handle: '@nexoflow.app', description: 'Publique e acompanhe conteúdo profissional em escala.', destinationUrl: 'https://instagram.com/nexoflow.app', category: 'Ferramentas', bid: 'R$ 480', clicks: '1.284', move: '+2', tone: 'lime' },
-    { id: 'br-atlas', rank: 2, name: 'Clube Atlas', handle: '@clubeatlas.br', description: 'Comunidade para creators construindo negócios digitais.', destinationUrl: 'https://instagram.com/clubeatlas.br', category: 'Comunidades', bid: 'R$ 390', clicks: '946', move: '-1', tone: 'violet' },
-    { id: 'br-marca', rank: 3, name: 'Marca em Jogo', handle: '@marcaemjogo', description: 'Estratégia de marca para quem vende pela internet.', destinationUrl: 'https://instagram.com/marcaemjogo', category: 'Serviços', bid: 'R$ 270', clicks: '721', move: '+4', tone: 'coral' },
+    { id: 'br-nexoflow', rank: 1, name: 'NexoFlow', handle: '@nexoflow.app', description: 'Publique e acompanhe conteúdo profissional em escala.', destinationUrl: 'https://instagram.com/nexoflow.app', category: 'Ferramentas', bid: 'R$ 480', clicks: '1.284', move: '+2', tone: 'sunset' },
+    { id: 'br-atlas', rank: 2, name: 'Clube Atlas', handle: '@clubeatlas.br', description: 'Comunidade para creators construindo negócios digitais.', destinationUrl: 'https://instagram.com/clubeatlas.br', category: 'Criadores', bid: 'R$ 390', clicks: '946', move: '-1', tone: 'violet' },
+    { id: 'br-marca', rank: 3, name: 'Marca em Jogo', handle: '@marcaemjogo', description: 'Estratégia de marca para quem vende pela internet.', destinationUrl: 'https://instagram.com/marcaemjogo', category: 'Serviços', bid: 'R$ 270', clicks: '721', move: '+4', tone: 'pink' },
     { id: 'br-creatoros', rank: 4, name: 'CreatorOS', handle: '@creatoros.br', description: 'Operação simples para creators profissionais.', destinationUrl: 'https://instagram.com/creatoros.br', category: 'Ferramentas', bid: 'R$ 190', clicks: '508', move: '—', tone: 'blue' },
-    { id: 'br-neblina', rank: 5, name: 'Loja Neblina', handle: '@loj_neblina', description: 'Produtos autorais em pequenas coleções.', destinationUrl: 'https://instagram.com/loj_neblina', category: 'Marcas', bid: 'R$ 120', clicks: '364', move: '+1', tone: 'sand' },
+    { id: 'br-neblina', rank: 5, name: 'Loja Neblina', handle: '@loj_neblina', description: 'Produtos autorais em pequenas coleções.', destinationUrl: 'https://instagram.com/loj_neblina', category: 'Marcas', bid: 'R$ 120', clicks: '364', move: '+1', tone: 'orange' },
   ],
   world: [
-    { id: 'world-orbit', rank: 1, name: 'Orbit Tools', handle: '@orbit.tools', description: 'Tiny tools for ambitious internet businesses.', destinationUrl: 'https://instagram.com/orbit.tools', category: 'Tools', bid: '$320', clicks: '1,108', move: '+3', tone: 'lime' },
+    { id: 'world-orbit', rank: 1, name: 'Orbit Tools', handle: '@orbit.tools', description: 'Tiny tools for ambitious internet businesses.', destinationUrl: 'https://instagram.com/orbit.tools', category: 'Tools', bid: '$320', clicks: '1,108', move: '+3', tone: 'sunset' },
     { id: 'world-luna', rank: 2, name: 'Made by Luna', handle: '@madebyluna', description: 'A creator-led studio for thoughtful digital products.', destinationUrl: 'https://instagram.com/madebyluna', category: 'Creators', bid: '$255', clicks: '879', move: '-1', tone: 'violet' },
-    { id: 'world-tiny', rank: 3, name: 'Tiny Launch', handle: '@tinylaunch', description: 'Launch small products with a focused audience.', destinationUrl: 'https://instagram.com/tinylaunch', category: 'Products', bid: '$180', clicks: '644', move: '+1', tone: 'coral' },
+    { id: 'world-tiny', rank: 3, name: 'Tiny Launch', handle: '@tinylaunch', description: 'Launch small products with a focused audience.', destinationUrl: 'https://instagram.com/tinylaunch', category: 'Products', bid: '$180', clicks: '644', move: '+1', tone: 'pink' },
     { id: 'world-prompt', rank: 4, name: 'Prompt Club', handle: '@promptclub', description: 'Practical AI workflows for creative teams.', destinationUrl: 'https://instagram.com/promptclub', category: 'Communities', bid: '$96', clicks: '401', move: '—', tone: 'blue' },
-    { id: 'world-north', rank: 5, name: 'North Studio', handle: '@northstudio', description: 'Brand and web work for independent founders.', destinationUrl: 'https://instagram.com/northstudio', category: 'Studios', bid: '$72', clicks: '295', move: '+2', tone: 'sand' },
+    { id: 'world-north', rank: 5, name: 'North Studio', handle: '@northstudio', description: 'Brand and web work for independent founders.', destinationUrl: 'https://instagram.com/northstudio', category: 'Studios', bid: '$72', clicks: '295', move: '+2', tone: 'orange' },
   ],
 };
 
 const copy = {
   br: {
-    eyebrow: 'Ranking patrocinado em tempo real', title: 'A atenção está em disputa.',
-    body: 'Negócios e creators pagam para subir. Você descobre quem está crescendo — e cada clique fica visível.',
-    cta: 'Entrar no ranking', how: 'Como funciona', market: 'Brasil', period: 'Semana 34', ends: 'encerra em 2d 14h',
-    leader: 'Desafiar o líder', min: 'A partir de R$ 19', sponsored: 'Posições definidas por boosts confirmados',
-    clicks: 'cliques', bid: 'boost', activity: 'agora', paid: 'boost confirmado',
-    update: 'acabou de ultrapassar o segundo colocado.', step: 'Adicione seu perfil.',
-    stepBody: 'Escolha um valor, confirme o pagamento e suba em tempo real.',
-    trust: ['pagamentos confirmados', 'cliques filtrados', 'ranking auditável'],
-    detailCta: 'Visitar projeto', detailChallenge: 'Superar esta posição', close: 'Fechar',
-    modalTitle: 'Entre na disputa.', modalBody: 'Envie seu projeto para moderação. Depois da aprovação, você recebe o checkout do primeiro boost.',
+    nav: ['Ranking', 'Categorias', 'Como funciona'],
+    online: 'online', visitors: 'visitantes desde o lançamento', stats: 'ver dados',
+    claim: 'Assuma o #1 por', spots: 'Novas posições começam em R$ 19.',
+    explainer: 'Um valor menor ainda coloca você no ranking, na melhor posição disponível.',
+    input: 'URL do produto ou @perfil', choose: 'Escolha uma categoria', action: 'Entrar na disputa',
+    already: 'Já está na lista? Use o mesmo perfil e aumente seu lance.',
+    periods: ['Histórico', 'Hoje', 'Esta semana'], categoryTabs: ['Todos', 'Criadores', 'Marcas', 'Ferramentas', 'Serviços'],
+    clicks: 'cliques', details: 'ver detalhes', activity: 'Atividade recente', showMore: 'Mostrar mais',
+    joined: 'entrou na posição', minutes: 'há 12 minutos', sponsored: 'ranking patrocinado',
+    visit: 'Visitar projeto', challenge: 'Superar esta posição', close: 'Fechar',
+    modalTitle: 'Coloque seu projeto na disputa.', modalBody: 'Envie os dados para análise. Depois da aprovação, você recebe as instruções para o primeiro boost.',
     name: 'Nome do projeto', handle: 'Perfil do Instagram', description: 'Descrição curta', url: 'Link de destino',
     email: 'E-mail de contato', category: 'Categoria', submit: 'Enviar para análise', sending: 'Enviando…',
-    successTitle: 'Recebemos seu projeto.', successBody: 'A equipe vai verificar o perfil e o link antes de liberar o primeiro boost.',
+    successTitle: 'Projeto recebido.', successBody: 'Vamos verificar o perfil e o link antes de liberar a participação.',
     error: 'Não foi possível enviar. Confira os campos e tente novamente.',
+    footer: 'Posições patrocinadas. Cliques mensurados. Sem promessa de vendas ou retorno financeiro.',
   },
   world: {
-    eyebrow: 'Live sponsored leaderboard', title: 'Attention is up for grabs.',
-    body: 'Businesses and creators pay to climb. You discover who is rising — and every click stays visible.',
-    cta: 'Enter the ranking', how: 'How it works', market: 'World', period: 'Week 34', ends: 'ends in 2d 14h',
-    leader: 'Challenge the leader', min: 'Starting at $5', sponsored: 'Positions are set by confirmed boosts',
-    clicks: 'clicks', bid: 'boost', activity: 'now', paid: 'confirmed boost',
-    update: 'just moved ahead of the second place.', step: 'Add your profile.',
-    stepBody: 'Choose an amount, confirm payment and climb in real time.',
-    trust: ['confirmed payments', 'filtered clicks', 'auditable ranking'],
-    detailCta: 'Visit project', detailChallenge: 'Beat this position', close: 'Close',
-    modalTitle: 'Enter the competition.', modalBody: 'Submit your project for review. Once approved, you receive the checkout for your first boost.',
+    nav: ['Leaderboard', 'Categories', 'How it works'],
+    online: 'online', visitors: 'visitors since launch', stats: 'see stats',
+    claim: 'Claim #1 for', spots: 'New spots start at $5.',
+    explainer: 'A smaller amount still puts you on the board at the best available position.',
+    input: 'Your product URL or @handle', choose: 'Choose a category', action: 'Enter the race',
+    already: 'Already listed? Use the same handle and raise your bid.',
+    periods: ['All-time', 'Today', 'This week'], categoryTabs: ['All', 'Creators', 'Brands', 'Tools', 'Services'],
+    clicks: 'clicks', details: 'see details', activity: 'Latest activity', showMore: 'Show more',
+    joined: 'joined at', minutes: '12 minutes ago', sponsored: 'sponsored ranking',
+    visit: 'Visit project', challenge: 'Beat this position', close: 'Close',
+    modalTitle: 'Put your project in the race.', modalBody: 'Submit the details for review. Once approved, you receive instructions for your first boost.',
     name: 'Project name', handle: 'Instagram profile', description: 'Short description', url: 'Destination link',
     email: 'Contact email', category: 'Category', submit: 'Submit for review', sending: 'Sending…',
-    successTitle: 'We received your project.', successBody: 'The team will review the profile and link before enabling the first boost.',
+    successTitle: 'Project received.', successBody: 'We will review the profile and link before enabling participation.',
     error: 'We could not submit it. Check the fields and try again.',
+    footer: 'Sponsored positions. Measured clicks. No promise of sales or financial return.',
   },
 };
 
-const tones = ['lime', 'violet', 'coral', 'blue', 'sand'];
+const tones = ['sunset', 'violet', 'pink', 'blue', 'orange'];
 
 function currency(amountMinor: number, code: string, market: Market) {
   return new Intl.NumberFormat(market === 'br' ? 'pt-BR' : 'en-US', {
@@ -79,12 +83,16 @@ function currency(amountMinor: number, code: string, market: Market) {
 
 export default function Home() {
   const [market, setMarket] = useState<Market>('br');
+  const [period, setPeriod] = useState(0);
+  const [category, setCategory] = useState(0);
   const [remoteBoards, setRemoteBoards] = useState<Partial<Record<Market, BoardItem[]>>>({});
   const [selected, setSelected] = useState<BoardItem | null>(null);
   const [joinOpen, setJoinOpen] = useState(false);
   const [submission, setSubmission] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [topBid, setTopBid] = useState(499);
   const text = copy[market];
   const board = useMemo(() => remoteBoards[market] ?? fallbackBoards[market], [market, remoteBoards]);
+  const displayedBid = market === 'br' ? `R$ ${topBid}` : `$${topBid}`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -105,7 +113,7 @@ export default function Home() {
   }, [market]);
 
   function chooseMarket(next: Market) {
-    setMarket(next); setSelected(null); setSubmission('idle');
+    setMarket(next); setSelected(null); setSubmission('idle'); setTopBid(next === 'br' ? 499 : 99);
   }
 
   async function submitListing(event: FormEvent<HTMLFormElement>) {
@@ -120,68 +128,95 @@ export default function Home() {
   }
 
   return (
-    <main className="site-shell">
+    <main className="site-shell" id="top">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="Instabid home"><span className="brand-mark" aria-hidden="true"><i /><i /></span><span>instabid</span><b>beta</b></a>
-        <nav className="market-switch" aria-label="Escolha o mercado">
+        <a className="brand-plate" href="#top" aria-label="Instabid home">
+          <span className="brand-emblem"><img src="/logo-emblem.png" alt="" /></span>
+          <span className="brand-name">Instabid</span>
+        </a>
+        <nav className="desktop-nav" aria-label="Navegação principal">
+          <a href="#ranking">{text.nav[0]}</a><a href="#categorias">{text.nav[1]}</a><a href="#como-funciona">{text.nav[2]}</a>
+        </nav>
+        <div className="market-switch" aria-label="Escolha o mercado">
           <button className={market === 'br' ? 'active' : ''} onClick={() => chooseMarket('br')} type="button">BR</button>
           <button className={market === 'world' ? 'active' : ''} onClick={() => chooseMarket('world')} type="button">WORLD</button>
-        </nav>
-        <button className="header-cta bare-button" onClick={() => setJoinOpen(true)} type="button">{text.cta}<span>↗</span></button>
+        </div>
       </header>
 
-      <section className="hero" id="top">
-        <div className="hero-copy">
-          <p className="eyebrow"><span />{text.eyebrow}</p><h1>{text.title}</h1><p className="hero-body">{text.body}</p>
-          <div className="hero-actions">
-            <button className="primary-button" onClick={() => setJoinOpen(true)} type="button">{text.cta}<span>↗</span></button>
-            <a className="text-link" href="#como-funciona">{text.how}<span>↓</span></a>
-          </div>
-          <div className="trust-line">{text.trust.map((item) => <span key={item}>● {item}</span>)}</div>
-        </div>
-        <aside className="live-card" aria-label="Atividade ao vivo">
-          <div className="live-card-top"><span className="live-label"><i /> LIVE</span><span>18s</span></div>
-          <div className="crown-row"><span className="rank-burst">#1</span><div><small>NOVO LÍDER</small><strong>{board[0].name}</strong></div></div>
-          <p><b>{board[0].handle}</b> {text.update}</p><div className="price-line"><span>{board[0].bid}</span><small>{text.paid}</small></div>
-          <button onClick={() => setJoinOpen(true)} type="button">{text.leader}<span>→</span></button>
-        </aside>
-      </section>
+      <div className="page-column">
+        <section className="live-summary">
+          <span className="online-dot" /><strong>42 {text.online}</strong><span>·</span><span>18.420 {text.visitors}</span><a href="#ranking">{text.stats} →</a>
+        </section>
 
-      <section className="leaderboard-section" id="ranking">
-        <div className="board-heading"><div><p className="section-kicker">{text.market} · {text.activity}</p><h2>Leaderboard</h2></div><div className="season-pill"><b>{text.period}</b><span>{text.ends}</span></div></div>
-        <div className="board-wrap">
-          <div className="board-note"><span>◎</span>{text.sponsored}</div>
-          <div className="board-table" role="table" aria-label={`Ranking ${text.market}`}>
-            {board.map((item) => (
-              <article className={`board-row ${item.rank === 1 ? 'leader' : ''}`} key={item.handle} onClick={() => setSelected(item)} role="row" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(item); }}>
-                <div className="position"><small>POS</small><b>{String(item.rank).padStart(2, '0')}</b></div><div className={`avatar ${item.tone}`}>{item.name.slice(0, 1)}</div>
-                <div className="profile"><strong>{item.name}</strong><span>{item.handle}</span></div>
-                <div className={`movement ${item.move.startsWith('+') ? 'up' : item.move.startsWith('-') ? 'down' : ''}`}>{item.move}</div>
-                <div className="metric"><small>{text.clicks}</small><b>{item.clicks}</b></div><div className="metric bid"><small>{text.bid}</small><b>{item.bid}</b></div>
-                <button onClick={(event) => { event.stopPropagation(); setSelected(item); }} type="button" aria-label={`${text.detailCta}: ${item.name}`}>↗</button>
-              </article>
+        <section className="bid-hero" id="como-funciona">
+          <div className="period-switch" aria-label="Período do ranking">
+            {text.periods.map((item, index) => <button className={period === index ? 'active' : ''} key={item} onClick={() => setPeriod(index)} type="button">{index === 0 && '♛ '}{item}</button>)}
+          </div>
+          <div className="claim-line">
+            <h1>{text.claim}</h1>
+            <button aria-label="Diminuir lance" onClick={() => setTopBid((value) => Math.max(market === 'br' ? 19 : 5, value - (market === 'br' ? 10 : 5)))} type="button">−</button>
+            <strong>{displayedBid}</strong>
+            <button aria-label="Aumentar lance" onClick={() => setTopBid((value) => value + (market === 'br' ? 10 : 5))} type="button">+</button>
+          </div>
+          <p><b>{text.spots}</b> {text.explainer}</p>
+          <div className="quick-entry">
+            <label><span>◎</span><input aria-label={text.input} placeholder={text.input} /></label>
+            <label><span>◇</span><select aria-label={text.choose} defaultValue=""><option value="" disabled>{text.choose}</option><option>Creators</option><option>Brands</option><option>Tools</option><option>Products</option><option>Services</option></select></label>
+            <button onClick={() => setJoinOpen(true)} type="button">{text.action}<span>↗</span></button>
+          </div>
+          <small>{text.already}</small>
+        </section>
+
+        <section className="ranking" id="ranking">
+          <div className="category-tabs" id="categorias">
+            {text.categoryTabs.map((item, index) => <button className={category === index ? 'active' : ''} key={item} onClick={() => setCategory(index)} type="button"><i>{['▦', '◉', '◆', '⌁', '✦'][index]}</i>{item}</button>)}
+          </div>
+
+          <div className="ranking-list">
+            {board.map((item, index) => (
+              <div key={item.id}>
+                <article className={`ranking-card ${index < 3 ? `podium podium-${index + 1}` : 'compact'}`} onClick={() => setSelected(item)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(item); }}>
+                  <div className="rank-chip">#{item.rank}</div>
+                  <div className={`avatar ${item.tone}`}>{item.name.slice(0, 1)}</div>
+                  <div className="project-copy">
+                    <strong>{item.name}</strong>
+                    <p>{item.description}</p>
+                    <div className="meta-line"><span>{item.handle}</span><span>◇ {item.category}</span><b><i /> {item.clicks} {text.clicks}</b></div>
+                  </div>
+                  <div className="bid-value">{item.bid}</div>
+                  <button className="detail-trigger" onClick={(event) => { event.stopPropagation(); setSelected(item); }} type="button">{text.details} →</button>
+                </article>
+                {index === 2 && (
+                  <aside className="activity-card">
+                    <div className="activity-title"><i /> <b>{text.activity}</b></div>
+                    <div className="activity-line"><span className="mini-avatar">N</span><p><b>@nuvem.studio</b><br />{text.joined} <strong>#8 · {market === 'br' ? 'R$ 54' : '$12'}</strong><small>{text.minutes}</small></p></div>
+                    <button type="button">{text.showMore}</button>
+                  </aside>
+                )}
+              </div>
             ))}
           </div>
-        </div>
-        <div className="entry-strip" id="como-funciona"><span className="entry-number">01</span><p><b>{text.step}</b> {text.stepBody}</p><span className="entry-min">{text.min}</span><button onClick={() => setJoinOpen(true)} type="button">{text.cta}<span>↗</span></button></div>
-      </section>
+        </section>
 
-      <footer className="site-footer">
-        <div className="brand footer-brand"><span className="brand-mark" aria-hidden="true"><i /><i /></span><span>instabid</span></div>
-        <p>{market === 'br' ? 'Posições patrocinadas. Sem promessa de vendas, seguidores ou retorno financeiro.' : 'Sponsored positions. No promise of sales, followers or financial return.'}</p>
-        <div><a href="#como-funciona">{text.how}</a><button onClick={() => setJoinOpen(true)} type="button">{text.cta}</button></div>
-      </footer>
+        <section className="final-cta">
+          <span className="cta-emblem"><img src="/logo-emblem.png" alt="" /></span>
+          <div><small>{text.sponsored}</small><h2>{market === 'br' ? 'Seu projeto pode ser o próximo líder.' : 'Your project could lead next.'}</h2></div>
+          <button onClick={() => setJoinOpen(true)} type="button">{text.action} ↗</button>
+        </section>
+      </div>
+
+      <footer><a className="footer-brand" href="#top">Instabid</a><p>{text.footer}</p><span>BR / WORLD · 2026</span></footer>
 
       {selected && (
         <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}>
           <aside className="detail-panel" aria-label={selected.name}>
             <button className="close-button" onClick={() => setSelected(null)} type="button">{text.close} ×</button>
-            <div className={`detail-avatar ${selected.tone}`}>{selected.name.slice(0, 1)}</div><p className="detail-rank">#{selected.rank} · {selected.category}</p>
-            <h3>{selected.name}</h3><span className="detail-handle">{selected.handle}</span><p>{selected.description}</p>
-            <div className="detail-stats"><div><small>{text.bid}</small><b>{selected.bid}</b></div><div><small>{text.clicks}</small><b>{selected.clicks}</b></div></div>
+            <div className={`detail-avatar ${selected.tone}`}>{selected.name.slice(0, 1)}</div>
+            <p className="detail-rank">#{selected.rank} · {selected.category}</p><h3>{selected.name}</h3><span className="detail-handle">{selected.handle}</span><p>{selected.description}</p>
+            <div className="detail-stats"><div><small>boost</small><b>{selected.bid}</b></div><div><small>{text.clicks}</small><b>{selected.clicks}</b></div></div>
             <p className="sponsor-disclosure">◎ {text.sponsored}</p>
-            <a className="detail-link" href={`/go/${selected.id}`} target="_blank" rel="sponsored noopener">{text.detailCta}<span>↗</span></a>
-            <button className="detail-challenge" onClick={() => { setSelected(null); setJoinOpen(true); }} type="button">{text.detailChallenge}<span>→</span></button>
+            <a className="detail-link" href={`/go/${selected.id}`} target="_blank" rel="sponsored noopener">{text.visit}<span>↗</span></a>
+            <button className="detail-challenge" onClick={() => { setSelected(null); setJoinOpen(true); }} type="button">{text.challenge}<span>→</span></button>
           </aside>
         </div>
       )}
