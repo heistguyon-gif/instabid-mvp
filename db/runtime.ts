@@ -1,6 +1,12 @@
-import { env } from 'cloudflare:workers';
-
 let initialized = false;
+
+const isVercel = process.env.VERCEL === '1';
+
+async function getCloudflareDatabase() {
+  const runtimeModule = ['cloudflare', 'workers'].join(':');
+  const runtime = await import(runtimeModule) as { env: { DB: D1Database } };
+  return runtime.env.DB;
+}
 
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS markets (
@@ -72,8 +78,9 @@ const demoBoosts = [
 ] as const;
 
 export async function ensureDatabase() {
-  if (initialized) return env.DB;
-  const db = env.DB;
+  if (isVercel) throw new Error('persistent_database_unavailable_in_vercel_preview');
+  const db = await getCloudflareDatabase();
+  if (initialized) return db;
   await db.batch(schemaStatements.map((statement) => db.prepare(statement)));
   await db.batch([
     db.prepare("INSERT OR IGNORE INTO markets (code, locale, currency, min_boost_minor, status) VALUES ('br', 'pt-BR', 'BRL', 1900, 'active')"),
@@ -100,6 +107,21 @@ export async function ensureDatabase() {
 }
 
 export async function getLeaderboard(market: 'br' | 'world') {
+  if (isVercel) {
+    return demoListings
+      .filter((listing) => listing[1] === market)
+      .map(([id, marketCode, name, handle, description, destinationUrl, , category, clicks]) => {
+        const boost = demoBoosts.find(([listingId]) => listingId === id);
+        return {
+          id, name, handle, description, destinationUrl, category, clicks: Number(clicks),
+          currency: boost?.[3] ?? (marketCode === 'br' ? 'BRL' : 'USD'),
+          seasonId: marketCode === 'br' ? 'br-s34' : 'world-s34',
+          seasonLabel: marketCode === 'br' ? 'Semana 34' : 'Week 34',
+          endsAt: '2026-08-24T02:59:59.000Z', totalMinor: boost?.[2] ?? 0,
+        };
+      })
+      .sort((a, b) => Number(b.totalMinor) - Number(a.totalMinor));
+  }
   const db = await ensureDatabase();
   const result = await db.prepare(`SELECT
       l.id, l.name, l.handle, l.description, l.destination_url AS destinationUrl,
@@ -120,6 +142,9 @@ export async function createPendingListing(input: {
   market: 'br' | 'world'; name: string; handle: string; description: string;
   destinationUrl: string; contactEmail: string; category: string;
 }) {
+  if (isVercel) {
+    return { id: crypto.randomUUID(), status: 'preview_only' as const };
+  }
   const db = await ensureDatabase();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -128,4 +153,17 @@ export async function createPendingListing(input: {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)`)
     .bind(id, input.market, input.name, input.handle, input.description, input.destinationUrl, input.contactEmail, input.category, now).run();
   return { id, status: 'pending' as const };
+}
+
+export async function getListingDestination(id: string) {
+  if (isVercel) {
+    const listing = demoListings.find(([listingId]) => listingId === id);
+    return listing?.[5] ?? null;
+  }
+  const db = await ensureDatabase();
+  const listing = await db.prepare("SELECT destination_url AS destinationUrl FROM listings WHERE id = ? AND status = 'active'")
+    .bind(id).first<{ destinationUrl: string }>();
+  if (!listing) return null;
+  await db.prepare('UPDATE listings SET click_count = click_count + 1 WHERE id = ?').bind(id).run();
+  return listing.destinationUrl;
 }

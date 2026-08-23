@@ -98,8 +98,9 @@ export default function Home() {
     const controller = new AbortController();
     fetch(`/api/leaderboard?market=${market}`, { signal: controller.signal })
       .then((response) => response.ok ? response.json() : Promise.reject())
-      .then((payload: { listings: Array<Record<string, unknown>> }) => {
-        const items = payload.listings.map((item, index) => ({
+      .then((payload) => {
+        const listings = (payload as { listings: Array<Record<string, unknown>> }).listings;
+        const items = listings.map((item, index) => ({
           id: String(item.id), rank: index + 1, name: String(item.name), handle: String(item.handle),
           description: String(item.description), destinationUrl: String(item.destinationUrl), category: String(item.category),
           bid: currency(Number(item.totalMinor), String(item.currency), market),
