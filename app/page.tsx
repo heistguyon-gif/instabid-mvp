@@ -50,6 +50,7 @@ const copy = {
     name: 'Nome do projeto', handle: 'Perfil do Instagram', description: 'Descrição curta', url: 'Link de destino',
     email: 'E-mail de contato', category: 'Categoria', submit: 'Enviar para análise', sending: 'Enviando…',
     successTitle: 'Projeto recebido.', successBody: 'Vamos verificar o perfil e o link antes de liberar a participação.',
+    previewTitle: 'Este é o preview da Vercel.', previewBody: 'A inscrição não foi salva aqui. Use a versão funcional do Sites enquanto conectamos um banco compartilhado.',
     error: 'Não foi possível enviar. Confira os campos e tente novamente.',
     footer: 'Posições patrocinadas. Cliques mensurados. Sem promessa de vendas ou retorno financeiro.',
   },
@@ -68,6 +69,7 @@ const copy = {
     name: 'Project name', handle: 'Instagram profile', description: 'Short description', url: 'Destination link',
     email: 'Contact email', category: 'Category', submit: 'Submit for review', sending: 'Sending…',
     successTitle: 'Project received.', successBody: 'We will review the profile and link before enabling participation.',
+    previewTitle: 'This is the Vercel preview.', previewBody: 'This submission was not saved. Use the functional Sites version while we connect a shared database.',
     error: 'We could not submit it. Check the fields and try again.',
     footer: 'Sponsored positions. Measured clicks. No promise of sales or financial return.',
   },
@@ -88,7 +90,7 @@ export default function Home() {
   const [remoteBoards, setRemoteBoards] = useState<Partial<Record<Market, BoardItem[]>>>({});
   const [selected, setSelected] = useState<BoardItem | null>(null);
   const [joinOpen, setJoinOpen] = useState(false);
-  const [submission, setSubmission] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [submission, setSubmission] = useState<'idle' | 'sending' | 'success' | 'preview' | 'error'>('idle');
   const [topBid, setTopBid] = useState(499);
   const text = copy[market];
   const board = useMemo(() => remoteBoards[market] ?? fallbackBoards[market], [market, remoteBoards]);
@@ -125,7 +127,12 @@ export default function Home() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ market, ...Object.fromEntries(form.entries()) }),
     }).catch(() => null);
-    setSubmission(response?.ok ? 'success' : 'error');
+    if (!response?.ok) {
+      setSubmission('error');
+      return;
+    }
+    const payload = await response.json() as { listing?: { status?: string } };
+    setSubmission(payload.listing?.status === 'preview_only' ? 'preview' : 'success');
   }
 
   return (
@@ -226,8 +233,8 @@ export default function Home() {
         <div className="overlay form-overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setJoinOpen(false); }}>
           <section className="join-modal" aria-modal="true" role="dialog" aria-labelledby="join-title">
             <button className="close-button" onClick={() => setJoinOpen(false)} type="button">{text.close} ×</button>
-            {submission === 'success' ? (
-              <div className="success-state"><span>✓</span><h3 id="join-title">{text.successTitle}</h3><p>{text.successBody}</p><button onClick={() => setJoinOpen(false)} type="button">OK</button></div>
+            {submission === 'success' || submission === 'preview' ? (
+              <div className="success-state"><span>{submission === 'preview' ? '!' : '✓'}</span><h3 id="join-title">{submission === 'preview' ? text.previewTitle : text.successTitle}</h3><p>{submission === 'preview' ? text.previewBody : text.successBody}</p><button onClick={() => setJoinOpen(false)} type="button">OK</button></div>
             ) : (
               <><p className="modal-kicker">{market === 'br' ? 'BR · BRL' : 'WORLD · USD'}</p><h3 id="join-title">{text.modalTitle}</h3><p className="modal-intro">{text.modalBody}</p>
               <form onSubmit={submitListing}>
