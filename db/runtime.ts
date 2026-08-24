@@ -64,6 +64,35 @@ const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS idx_boosts_season_status ON boosts (season_id, status)`,
   `CREATE INDEX IF NOT EXISTS idx_boosts_listing_season ON boosts (listing_id, season_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_boosts_provider_payment ON boosts (provider, provider_payment_id)`,
+  `CREATE TABLE IF NOT EXISTS payments (
+    id TEXT PRIMARY KEY,
+    listing_id TEXT NOT NULL,
+    season_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    provider_payment_id TEXT,
+    amount_minor INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    status TEXT NOT NULL,
+    pix_copy_paste TEXT,
+    expires_at TEXT,
+    created_at TEXT NOT NULL,
+    confirmed_at TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_payments_listing_status ON payments (listing_id, status)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_provider_payment ON payments (provider, provider_payment_id)`,
+  `CREATE TABLE IF NOT EXISTS webhook_events (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    processed_at TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_webhook_events_provider_processed ON webhook_events (provider, processed_at)`,
+  `CREATE TABLE IF NOT EXISTS request_limits (
+    key TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 1,
+    expires_at TEXT NOT NULL
+  )`,
 ];
 
 const demoListings = [
@@ -121,6 +150,182 @@ export async function ensureDatabase() {
   return db;
 }
 
+function currentWeek(market: 'br' | 'world') {
+  const offsetMinutes = market === 'br' ? -180 : 0;
+  const shifted = new Date(Date.now() + offsetMinutes * 60_000);
+  const daysSinceMonday = (shifted.getUTCDay() + 6) % 7;
+  const localStartMs = Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate() - daysSinceMonday);
+  const start = new Date(localStartMs - offsetMinutes * 60_000);
+  const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const dateKey = new Date(localStartMs).toISOString().slice(0, 10);
+  return {
+    id: `${market}-${dateKey}`,
+    label: market === 'br' ? `Semana de ${dateKey}` : `Week of ${dateKey}`,
+    startsAt: start.toISOString(),
+    endsAt: end.toISOString(),
+  };
+}
+
+async function getActiveSeason(db: D1Database, market: 'br' | 'world') {
+  const now = new Date().toISOString();
+  const active = await db.prepare(`SELECT id, label, starts_at AS startsAt, ends_at AS endsAt
+    FROM seasons WHERE market_code = ? AND status = 'active' AND ends_at > ? ORDER BY ends_at ASC LIMIT 1`)
+    .bind(market, now).first<{ id: string; label: string; startsAt: string; endsAt: string }>();
+  if (active) return active;
+  const week = currentWeek(market);
+  await db.batch([
+    db.prepare("UPDATE seasons SET status = 'ended' WHERE market_code = ? AND status = 'active'").bind(market),
+    db.prepare(`INSERT OR IGNORE INTO seasons (id, market_code, label, starts_at, ends_at, status)
+      VALUES (?, ?, ?, ?, ?, 'active')`).bind(week.id, market, week.label, week.startsAt, week.endsAt),
+    db.prepare("UPDATE seasons SET status = 'active' WHERE id = ?").bind(week.id),
+  ]);
+  return week;
+}
+
+export type ListingPaymentInput = {
+  market: 'br';
+  name: string;
+  handle: string;
+  description: string;
+  destinationUrl: string;
+  contactEmail: string;
+  category: string;
+  requestedBoostMinor: number;
+};
+
+export async function prepareListingForPayment(input: ListingPaymentInput) {
+  if (isVercel) throw new Error('persistent_database_unavailable_in_vercel_preview');
+  const db = await ensureDatabase();
+  const existing = await db.prepare(`SELECT id, status, contact_email AS contactEmail
+    FROM listings WHERE market_code = 'br' AND handle = ?`).bind(input.handle).first<{ id: string; status: string; contactEmail: string }>();
+  let listingId = existing?.id;
+  if (existing && existing.status !== 'active' && existing.contactEmail !== input.contactEmail) throw new Error('duplicate_handle');
+  if (!listingId) {
+    listingId = crypto.randomUUID();
+    await db.prepare(`INSERT INTO listings
+      (id, market_code, name, handle, description, destination_url, contact_email, category, requested_boost_minor, status, click_count, created_at)
+      VALUES (?, 'br', ?, ?, ?, ?, ?, ?, ?, 'pending_payment', 0, ?)`)
+      .bind(listingId, input.name, input.handle, input.description, input.destinationUrl, input.contactEmail,
+        input.category, input.requestedBoostMinor, new Date().toISOString()).run();
+  } else if (existing?.status !== 'active') {
+    await db.prepare(`UPDATE listings SET name = ?, description = ?, destination_url = ?, category = ?,
+      requested_boost_minor = ?, status = 'pending_payment' WHERE id = ?`)
+      .bind(input.name, input.description, input.destinationUrl, input.category, input.requestedBoostMinor, listingId).run();
+  }
+  const season = await getActiveSeason(db, 'br');
+  return { listingId, seasonId: season.id };
+}
+
+export type PaymentRecord = {
+  id: string;
+  listingId: string;
+  seasonId: string;
+  providerPaymentId: string | null;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  pixCopyPaste: string | null;
+  expiresAt: string | null;
+};
+
+export async function getPayment(id: string) {
+  if (isVercel) return null;
+  const db = await ensureDatabase();
+  return db.prepare(`SELECT id, listing_id AS listingId, season_id AS seasonId,
+      provider_payment_id AS providerPaymentId, amount_minor AS amountMinor, currency, status,
+      pix_copy_paste AS pixCopyPaste, expires_at AS expiresAt
+    FROM payments WHERE id = ?`).bind(id).first<PaymentRecord>();
+}
+
+export async function createPaymentAttempt(input: {
+  id: string; listingId: string; seasonId: string; amountMinor: number;
+}) {
+  const db = await ensureDatabase();
+  await db.prepare(`INSERT OR IGNORE INTO payments
+    (id, listing_id, season_id, provider, amount_minor, currency, status, created_at)
+    VALUES (?, ?, ?, 'bravopay', ?, 'BRL', 'creating', ?)`)
+    .bind(input.id, input.listingId, input.seasonId, input.amountMinor, new Date().toISOString()).run();
+  return getPayment(input.id);
+}
+
+export async function attachBravopayTransaction(paymentId: string, transaction: {
+  id: string; copyPasteCode: string | null; expiresAt: string | null;
+}) {
+  const db = await ensureDatabase();
+  await db.prepare(`UPDATE payments SET provider_payment_id = ?, pix_copy_paste = ?, expires_at = ?, status = 'pending'
+    WHERE id = ? AND status IN ('creating', 'pending', 'failed')`)
+    .bind(transaction.id, transaction.copyPasteCode, transaction.expiresAt, paymentId).run();
+  return getPayment(paymentId);
+}
+
+export async function markPaymentFailed(paymentId: string) {
+  const db = await ensureDatabase();
+  await db.prepare("UPDATE payments SET status = 'failed' WHERE id = ? AND status = 'creating'").bind(paymentId).run();
+}
+
+export async function applyVerifiedTransaction(transaction: {
+  id: string; status: 'pending' | 'paid' | 'failed' | 'refunded'; amountMinor: number;
+  currency: string; method: string; externalReference: string;
+}) {
+  const db = await ensureDatabase();
+  const payment = await db.prepare(`SELECT id, listing_id AS listingId, season_id AS seasonId,
+      provider_payment_id AS providerPaymentId, amount_minor AS amountMinor, currency, status
+    FROM payments WHERE id = ? OR (provider = 'bravopay' AND provider_payment_id = ?) LIMIT 1`)
+    .bind(transaction.externalReference, transaction.id).first<PaymentRecord>();
+  if (!payment) throw new Error('payment_not_found');
+  if (payment.providerPaymentId && payment.providerPaymentId !== transaction.id) throw new Error('provider_payment_mismatch');
+  if (payment.amountMinor !== transaction.amountMinor || payment.currency !== transaction.currency || transaction.method !== 'PIX') {
+    throw new Error('payment_amount_mismatch');
+  }
+  if (transaction.externalReference && transaction.externalReference !== payment.id) throw new Error('payment_reference_mismatch');
+  const now = new Date().toISOString();
+  if (transaction.status === 'paid') {
+    await db.batch([
+      db.prepare(`UPDATE payments SET provider_payment_id = ?, status = 'confirmed', confirmed_at = ? WHERE id = ?`)
+        .bind(transaction.id, now, payment.id),
+      db.prepare(`INSERT OR IGNORE INTO boosts
+        (id, listing_id, season_id, provider, provider_payment_id, amount_minor, currency, status, created_at)
+        VALUES (?, ?, ?, 'bravopay', ?, ?, ?, 'confirmed', ?)`)
+        .bind(`boost-${payment.id}`, payment.listingId, payment.seasonId, transaction.id, payment.amountMinor, payment.currency, now),
+      db.prepare("UPDATE listings SET status = 'active' WHERE id = ?").bind(payment.listingId),
+    ]);
+  } else if (transaction.status === 'refunded') {
+    await db.batch([
+      db.prepare("UPDATE payments SET status = 'refunded' WHERE id = ?").bind(payment.id),
+      db.prepare("UPDATE boosts SET status = 'refunded' WHERE provider = 'bravopay' AND provider_payment_id = ?").bind(transaction.id),
+    ]);
+  } else if (transaction.status === 'failed') {
+    await db.prepare("UPDATE payments SET status = 'failed' WHERE id = ? AND status != 'confirmed'").bind(payment.id).run();
+  }
+  return getPayment(payment.id);
+}
+
+export async function beginWebhookEvent(id: string, eventType: string) {
+  const db = await ensureDatabase();
+  await db.prepare(`INSERT OR IGNORE INTO webhook_events (id, provider, event_type, received_at)
+    VALUES (?, 'bravopay', ?, ?)`).bind(id, eventType, new Date().toISOString()).run();
+  const event = await db.prepare('SELECT processed_at AS processedAt FROM webhook_events WHERE id = ?').bind(id).first<{ processedAt: string | null }>();
+  return !event?.processedAt;
+}
+
+export async function finishWebhookEvent(id: string) {
+  const db = await ensureDatabase();
+  await db.prepare('UPDATE webhook_events SET processed_at = ? WHERE id = ?').bind(new Date().toISOString(), id).run();
+}
+
+export async function consumeCheckoutRateLimit(visitorKey: string, limit = 5) {
+  const db = await ensureDatabase();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
+  await db.prepare(`INSERT INTO request_limits (key, count, expires_at) VALUES (?, 1, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      count = CASE WHEN expires_at <= ? THEN 1 ELSE count + 1 END,
+      expires_at = CASE WHEN expires_at <= ? THEN excluded.expires_at ELSE expires_at END`)
+    .bind(visitorKey, expiresAt, now.toISOString(), now.toISOString()).run();
+  const record = await db.prepare('SELECT count FROM request_limits WHERE key = ?').bind(visitorKey).first<{ count: number }>();
+  return Number(record?.count ?? limit + 1) <= limit;
+}
+
 export type RankingPeriod = 'all' | 'today' | 'week';
 
 export async function getLeaderboard(market: 'br' | 'world', period: RankingPeriod = 'week') {
@@ -141,6 +346,7 @@ export async function getLeaderboard(market: 'br' | 'world', period: RankingPeri
       .sort((a, b) => Number(b.totalMinor) - Number(a.totalMinor));
   }
   const db = await ensureDatabase();
+  await getActiveSeason(db, market);
   const boostJoin = period === 'all'
     ? "LEFT JOIN boosts b ON b.listing_id = l.id AND b.status = 'confirmed'"
     : period === 'today'

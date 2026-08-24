@@ -3,8 +3,10 @@ const shortenerHosts = new Set([
 ]);
 
 const blockedHosts = new Set([
-  'discord.gg', 'chat.whatsapp.com', 'telegram.me', 'localhost',
+  'discord.gg', 'chat.whatsapp.com', 'telegram.me', 'localhost', 'onlyfans.com', 'xvideos.com', 'pornhub.com',
 ]);
+
+const blockedListingTerms = /\b(?:cassino|casino|bet|aposta|betting|porn|porno|pornô|xxx|onlyfans|nude|nudes|escort|rifa|weapon|arma|cocaine|cocaína|pirâmide|pyramid scheme|followers? for sale|comprar seguidores)\b/i;
 
 const trackingParams = new Set(['fbclid', 'gclid', 'igshid', 'mc_cid', 'mc_eid']);
 const affiliateParam = /^(aff|affiliate|referral|invite|partner)(_|$)/i;
@@ -48,4 +50,8 @@ export function normalizeDestination(value: unknown) {
 
 export function isAllowedCategory(value: string): value is (typeof allowedCategories)[number] {
   return allowedCategories.includes(value as (typeof allowedCategories)[number]);
+}
+
+export function isAllowedListingContent(...values: unknown[]) {
+  return !blockedListingTerms.test(values.map((value) => String(value ?? '')).join(' '));
 }

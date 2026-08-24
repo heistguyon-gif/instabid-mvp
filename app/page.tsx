@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
+import QRCode from 'qrcode';
 import { BrandMark } from '@/components/BrandMark';
 
 type Market = 'br' | 'world';
@@ -13,6 +14,10 @@ type BoardItem = {
   totalMinor: number; currency: string; tone: string;
 };
 type BoardMeta = { activeListings: number; totalClicks: number; generatedAt: string; dataMode: 'demo' | 'pilot' };
+type PaymentView = {
+  id: string; status: string; amountMinor: number; currency: string;
+  pixCopyPaste: string | null; expiresAt: string | null;
+};
 
 const fallbackBoards: Record<Market, BoardItem[]> = {
   br: [
@@ -37,14 +42,14 @@ const copy = {
     demo: 'Ambiente demonstrativo: projetos e números atuais são exemplos. Dados reais entram no piloto.',
     claim: 'Assuma o #1 por', spots: 'Novas posições começam em R$ 19.', explainer: 'Um valor menor ainda coloca você na melhor posição que ele alcançar.',
     input: 'URL do produto ou @perfil', choose: 'Escolha uma categoria', action: 'Entrar na disputa',
-    already: 'Já está na lista? Use o mesmo perfil; após a verificação, você paga apenas o incremento.',
+    already: 'Já está na lista? Use o mesmo perfil e adicione apenas o boost que quiser.',
     periods: { week: 'Esta semana', today: 'Últimas 24h', all: 'Histórico' }, categories: { All: 'Todos', Creators: 'Criadores', Brands: 'Marcas', Tools: 'Ferramentas', Services: 'Serviços' },
     clicks: 'cliques válidos', details: 'ver detalhes', rulesTitle: 'Ranking verificável, não caixa-preta',
     rule1: 'Só pagamento confirmado altera posição.', rule2: 'Empate favorece quem chegou primeiro.', rule3: 'Cliques repetidos e robôs não entram na contagem.',
     sponsored: 'posição patrocinada', visit: 'Visitar projeto', challenge: 'Superar esta posição', page: 'Abrir página pública', close: 'Fechar',
-    modalTitle: 'Coloque seu projeto na disputa.', modalBody: 'No piloto, você envia a candidatura e o valor pretendido. Revisamos perfil, propriedade e destino antes de cobrar.',
+    modalTitle: 'Coloque seu projeto na disputa.', modalBody: 'Preencha os dados, gere o Pix e acompanhe a confirmação nesta tela. Só o pagamento confirmado altera o ranking.',
     name: 'Nome do projeto', handle: 'Perfil do Instagram', description: 'Descrição curta', url: 'Link de destino', email: 'E-mail de contato', category: 'Categoria', intended: 'Boost pretendido (R$)',
-    submit: 'Enviar para análise', sending: 'Enviando…', successTitle: 'Projeto recebido.', successBody: 'Vamos verificar o perfil e o link. Nenhum pagamento foi cobrado.',
+    submit: 'Gerar Pix', sending: 'Gerando Pix…', successTitle: 'Pagamento confirmado.', successBody: 'Seu boost entrou no ranking. A nova posição já está sendo atualizada.',
     previewTitle: 'Este é o preview da Vercel.', previewBody: 'A inscrição não foi salva aqui. Use a versão funcional do Sites enquanto conectamos um banco compartilhado.',
     error: 'Não foi possível enviar. Use URL https, evite encurtadores e confira todos os campos.', empty: 'Nenhum projeto nesta categoria ainda.',
     footer: 'Posições patrocinadas. Cliques filtrados. Sem promessa de vendas, seguidores ou retorno financeiro.', legal: ['Regras', 'Privacidade', 'Sobre'],
@@ -89,10 +94,14 @@ export default function Home() {
   const [boardMeta, setBoardMeta] = useState<Record<string, BoardMeta>>({});
   const [selected, setSelected] = useState<BoardItem | null>(null);
   const [joinOpen, setJoinOpen] = useState(false);
-  const [submission, setSubmission] = useState<'idle' | 'sending' | 'success' | 'preview' | 'error'>('idle');
+  const [submission, setSubmission] = useState<'idle' | 'sending' | 'payment' | 'paid' | 'success' | 'preview' | 'error'>('idle');
+  const [payment, setPayment] = useState<PaymentView | null>(null);
+  const [qrImage, setQrImage] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [quickInput, setQuickInput] = useState('');
   const [quickCategory, setQuickCategory] = useState('');
-  const [formSeed, setFormSeed] = useState({ handle: '', url: '', category: '', boostMajor: 19 });
+  const [formSeed, setFormSeed] = useState({ handle: '', url: '', category: '', boostMajor: 19, requestKey: '' });
   const [bidMinor, setBidMinor] = useState(49000);
   const text = copy[market];
   const boardKey = `${market}:${period}`;
@@ -101,6 +110,8 @@ export default function Home() {
   const incrementMinor = market === 'br' ? 1000 : 100;
   const minBoostMinor = market === 'br' ? 1900 : 500;
   const visibleBoard = useMemo(() => category === 'All' ? board : board.filter((item) => (categoryAliases[item.category] ?? item.category) === category), [board, category]);
+  const paymentId = payment?.id;
+  const paymentStatus = payment?.status;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -117,11 +128,40 @@ export default function Home() {
         if (items.length) setBidMinor(Math.max(market === 'br' ? 1900 : 500, items[0].totalMinor + (market === 'br' ? 1000 : 100)));
       }).catch(() => undefined);
     return () => controller.abort();
-  }, [market, period, boardKey]);
+  }, [market, period, boardKey, refreshNonce]);
+
+  useEffect(() => {
+    if (!payment?.pixCopyPaste) return;
+    let active = true;
+    QRCode.toDataURL(payment.pixCopyPaste, { width: 260, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#17185b', light: '#ffffff' } })
+      .then((url) => { if (active) setQrImage(url); })
+      .catch(() => setQrImage(''));
+    return () => { active = false; };
+  }, [payment?.pixCopyPaste]);
+
+  useEffect(() => {
+    if (submission !== 'payment' || !paymentId || paymentStatus !== 'pending') return;
+    let active = true;
+    const check = async () => {
+      const response = await fetch(`/api/payments/${encodeURIComponent(paymentId)}`, { cache: 'no-store' }).catch(() => null);
+      if (!response?.ok || !active) return;
+      const payload = await response.json() as { payment?: PaymentView };
+      if (!payload.payment) return;
+      setPayment(payload.payment);
+      if (payload.payment.status === 'confirmed') {
+        setSubmission('paid');
+        setRemoteBoards({});
+        setRefreshNonce((value) => value + 1);
+      }
+    };
+    const timer = window.setInterval(check, 4_000);
+    void check();
+    return () => { active = false; window.clearInterval(timer); };
+  }, [submission, paymentId, paymentStatus]);
 
   function chooseMarket(next: Market) {
     const nextIncrement = next === 'br' ? 1000 : 100;
-    setMarket(next); setBidMinor(fallbackBoards[next][0].totalMinor + nextIncrement); setSelected(null); setSubmission('idle'); setCategory('All'); setQuickCategory('');
+    setMarket(next); setBidMinor(fallbackBoards[next][0].totalMinor + nextIncrement); setSelected(null); setSubmission('idle'); setPayment(null); setCategory('All'); setQuickCategory('');
   }
 
   function openJoin(targetMinor = bidMinor) {
@@ -129,18 +169,49 @@ export default function Home() {
     const isHandle = value.startsWith('@');
     const handle = isHandle ? value : '';
     const url = isHandle ? `https://instagram.com/${value.slice(1)}` : value.startsWith('https://') ? value : '';
-    setFormSeed({ handle, url, category: quickCategory, boostMajor: targetMinor / 100 });
-    setSubmission('idle'); setJoinOpen(true);
+    setFormSeed({ handle, url, category: quickCategory, boostMajor: targetMinor / 100, requestKey: crypto.randomUUID() });
+    setPayment(null); setQrImage(''); setCopied(false); setSubmission('idle'); setJoinOpen(true);
   }
 
   async function submitListing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmission('sending');
     const form = new FormData(event.currentTarget);
     const requestedBoostMinor = Math.round(Number(form.get('requestedBoostMajor')) * 100);
-    const response = await fetch('/api/listings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ market, ...Object.fromEntries(form.entries()), requestedBoostMinor }) }).catch(() => null);
+    const fields = Object.fromEntries(form.entries());
+    const endpoint = market === 'br' ? '/api/checkout/pix' : '/api/listings';
+    const urlParams = new URLSearchParams(window.location.search);
+    const tracking = Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'ttclid', 'gclid', 'src', 'sck']
+      .flatMap((key) => urlParams.get(key) ? [[key, urlParams.get(key) as string]] : []));
+    const body = market === 'br'
+      ? {
+          ...fields,
+          market,
+          requestedBoostMinor,
+          idempotencyKey: formSeed.requestKey,
+          buyer: { name: form.get('buyerName'), email: form.get('contactEmail'), document: form.get('document'), phone: form.get('phone') },
+          tracking,
+        }
+      : { market, ...fields, requestedBoostMinor };
+    const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
     if (!response?.ok) return setSubmission('error');
-    const payload = await response.json() as { listing?: { status?: string } };
+    const payload = await response.json() as { listing?: { status?: string }; payment?: PaymentView };
+    if (market === 'br' && payload.payment) {
+      setPayment(payload.payment);
+      setSubmission(payload.payment.status === 'confirmed' ? 'paid' : 'payment');
+      return;
+    }
     setSubmission(payload.listing?.status === 'preview_only' ? 'preview' : 'success');
+  }
+
+  async function copyPix() {
+    if (!payment?.pixCopyPaste) return;
+    try {
+      await navigator.clipboard.writeText(payment.pixCopyPaste);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1_800);
+    } catch {
+      setCopied(false);
+    }
   }
 
   return (
@@ -180,7 +251,44 @@ export default function Home() {
 
       {selected && <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}><aside className="detail-panel" aria-label={selected.name}><button className="close-button" onClick={() => setSelected(null)} type="button">{text.close} ×</button><div className={`detail-avatar ${selected.tone}`}>{selected.name.slice(0, 1)}</div><p className="detail-rank">#{selected.rank} · {localizedCategory(selected.category, market)}</p><h3>{selected.name}</h3><span className="detail-handle">{selected.handle}</span><p>{selected.description}</p><div className="detail-stats"><div><small>boost</small><b>{selected.bid}</b></div><div><small>{text.clicks}</small><b>{selected.clicks}</b></div></div><p className="sponsor-disclosure">◎ {text.sponsored}</p><a className="detail-link" href={`/go/${selected.id}`} target="_blank" rel="sponsored noopener noreferrer">{text.visit}<span>↗</span></a><a className="public-page-link" href={`/participant/${selected.id}`}>{text.page}<span>→</span></a><button className="detail-challenge" onClick={() => { setSelected(null); openJoin(selected.totalMinor + incrementMinor); }} type="button">{text.challenge}<span>→</span></button></aside></div>}
 
-      {joinOpen && <div className="overlay form-overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setJoinOpen(false); }}><section className="join-modal" aria-modal="true" role="dialog" aria-labelledby="join-title"><button className="close-button" onClick={() => setJoinOpen(false)} type="button">{text.close} ×</button>{submission === 'success' || submission === 'preview' ? <div className="success-state"><span>{submission === 'preview' ? '!' : '✓'}</span><h3 id="join-title">{submission === 'preview' ? text.previewTitle : text.successTitle}</h3><p>{submission === 'preview' ? text.previewBody : text.successBody}</p><button onClick={() => setJoinOpen(false)} type="button">OK</button></div> : <><p className="modal-kicker">{market === 'br' ? 'BR · BRL' : 'WORLD · USD'} · {text.sponsored}</p><h3 id="join-title">{text.modalTitle}</h3><p className="modal-intro">{text.modalBody}</p><form key={`${formSeed.handle}:${formSeed.url}:${formSeed.category}:${formSeed.boostMajor}`} onSubmit={submitListing}><label>{text.name}<input name="name" required minLength={2} maxLength={60} /></label><label>{text.handle}<input defaultValue={formSeed.handle} name="handle" required placeholder="@seuperfil" pattern="@?[A-Za-z0-9._]{1,30}" /></label><label className="full">{text.description}<textarea name="description" required minLength={12} maxLength={220} rows={3} /></label><label>{text.url}<input defaultValue={formSeed.url} name="destinationUrl" required type="url" placeholder="https://" /></label><label>{text.email}<input name="contactEmail" required type="email" /></label><label>{text.intended}<input defaultValue={formSeed.boostMajor} min={minBoostMinor / 100} max={999999} name="requestedBoostMajor" required step="1" type="number" /></label><label>{text.category}<select defaultValue={formSeed.category} name="category" required><option value="" disabled>—</option><option value="Creators">{localizedCategory('Creators', market)}</option><option value="Products">{localizedCategory('Products', market)}</option><option value="Tools">{localizedCategory('Tools', market)}</option><option value="Brands">{localizedCategory('Brands', market)}</option><option value="Services">{localizedCategory('Services', market)}</option><option value="Communities">{localizedCategory('Communities', market)}</option></select></label>{submission === 'error' && <p className="form-error">{text.error}</p>}<p className="form-disclosure full">{market === 'br' ? 'Enviar não gera cobrança. A posição só muda depois de aprovação e confirmação do pagamento.' : 'Submitting does not charge you. Rank changes only after approval and confirmed payment.'}</p><button className="submit-button full" disabled={submission === 'sending'} type="submit">{submission === 'sending' ? text.sending : text.submit}<span>↗</span></button></form></>}</section></div>}
+      {joinOpen && <div className="overlay form-overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setJoinOpen(false); }}>
+        <section className="join-modal" aria-modal="true" role="dialog" aria-labelledby="join-title">
+          <button className="close-button" onClick={() => setJoinOpen(false)} type="button">{text.close} ×</button>
+          {submission === 'paid' || submission === 'success' || submission === 'preview' ? <div className="success-state">
+            <span>{submission === 'preview' ? '!' : '✓'}</span>
+            <h3 id="join-title">{submission === 'preview' ? text.previewTitle : text.successTitle}</h3>
+            <p>{submission === 'preview' ? text.previewBody : text.successBody}</p>
+            <button onClick={() => { setJoinOpen(false); if (submission === 'paid') window.location.hash = 'ranking'; }} type="button">{submission === 'paid' ? 'Ver ranking' : 'OK'}</button>
+          </div> : submission === 'payment' && payment ? <div className="pix-state">
+            <p className={`payment-status ${payment.status}`}>{payment.status === 'failed' ? 'Pix expirado' : '● Aguardando confirmação'}</p>
+            <h3 id="join-title">Pague {currency(payment.amountMinor, 'BRL', 'br')}</h3>
+            <p className="modal-intro">Escaneie o QR Code ou copie o código Pix. Sua posição entra automaticamente após a confirmação.</p>
+            {payment.status === 'failed' ? <div className="pix-expired">Esta cobrança expirou. Gere um novo Pix para entrar na disputa.</div> : <>
+              <div className="pix-qr">{qrImage ? <Image src={qrImage} alt="QR Code Pix para pagamento" width={260} height={260} unoptimized /> : <span>Gerando QR Code…</span>}</div>
+              <div className="pix-copy"><span>{payment.pixCopyPaste}</span><button onClick={copyPix} type="button">{copied ? 'Copiado!' : 'Copiar Pix'}</button></div>
+              <small className="pix-note">Confirmação automática e segura pela BravoPay. Não feche esta tela até o pagamento ser reconhecido.</small>
+            </>}
+            <button className="pix-back" onClick={() => { setPayment(null); setSubmission('idle'); setFormSeed((current) => ({ ...current, requestKey: crypto.randomUUID() })); }} type="button">{payment.status === 'failed' ? 'Gerar novo Pix' : 'Voltar e revisar'}</button>
+          </div> : <>
+            <p className="modal-kicker">{market === 'br' ? 'BR · PIX · BRAVOPAY' : 'WORLD · USD'} · {text.sponsored}</p>
+            <h3 id="join-title">{text.modalTitle}</h3>
+            <p className="modal-intro">{text.modalBody}</p>
+            <form key={`${formSeed.handle}:${formSeed.url}:${formSeed.category}:${formSeed.boostMajor}:${formSeed.requestKey}`} onSubmit={submitListing}>
+              <label>{text.name}<input name="name" required minLength={2} maxLength={60} /></label>
+              <label>{text.handle}<input defaultValue={formSeed.handle} name="handle" required placeholder="@seuperfil" pattern="@?[A-Za-z0-9._]{1,30}" /></label>
+              <label className="full">{text.description}<textarea name="description" required minLength={12} maxLength={220} rows={3} /></label>
+              <label>{text.url}<input defaultValue={formSeed.url} name="destinationUrl" required type="url" placeholder="https://" /></label>
+              <label>{text.email}<input name="contactEmail" required type="email" /></label>
+              {market === 'br' && <><label>Nome completo do pagador<input autoComplete="name" name="buyerName" required minLength={5} /></label><label>CPF ou CNPJ<input autoComplete="off" inputMode="numeric" name="document" required /></label><label>Celular com DDD<input autoComplete="tel" inputMode="tel" name="phone" required /></label></>}
+              <label>{text.intended}<input defaultValue={formSeed.boostMajor} min={minBoostMinor / 100} max={999999} name="requestedBoostMajor" required step="1" type="number" /></label>
+              <label>{text.category}<select defaultValue={formSeed.category} name="category" required><option value="" disabled>—</option><option value="Creators">{localizedCategory('Creators', market)}</option><option value="Products">{localizedCategory('Products', market)}</option><option value="Tools">{localizedCategory('Tools', market)}</option><option value="Brands">{localizedCategory('Brands', market)}</option><option value="Services">{localizedCategory('Services', market)}</option><option value="Communities">{localizedCategory('Communities', market)}</option></select></label>
+              {submission === 'error' && <p className="form-error">{market === 'br' ? 'Não foi possível gerar o Pix. Confira os dados, CPF/CNPJ, celular e tente novamente.' : text.error}</p>}
+              <p className="form-disclosure full">{market === 'br' ? 'Ao gerar o Pix, o valor exibido será cobrado pela BravoPay. A posição só muda após a confirmação; ser ultrapassado não gera reembolso automático.' : 'Submitting does not charge you. Rank changes only after approval and confirmed payment.'}</p>
+              <button className="submit-button full" disabled={submission === 'sending'} type="submit">{submission === 'sending' ? text.sending : text.submit}<span>↗</span></button>
+            </form>
+          </>}
+        </section>
+      </div>}
     </main>
   );
 }

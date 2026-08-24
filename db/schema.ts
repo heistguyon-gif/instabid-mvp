@@ -62,3 +62,37 @@ export const boosts = sqliteTable('boosts', {
   index('idx_boosts_listing_season').on(table.listingId, table.seasonId),
   uniqueIndex('idx_boosts_provider_payment').on(table.provider, table.providerPaymentId),
 ]);
+
+export const payments = sqliteTable('payments', {
+  id: text('id').primaryKey(),
+  listingId: text('listing_id').notNull(),
+  seasonId: text('season_id').notNull(),
+  provider: text('provider').notNull(),
+  providerPaymentId: text('provider_payment_id'),
+  amountMinor: integer('amount_minor').notNull(),
+  currency: text('currency').notNull(),
+  status: text('status').notNull(),
+  pixCopyPaste: text('pix_copy_paste'),
+  expiresAt: text('expires_at'),
+  createdAt: text('created_at').notNull(),
+  confirmedAt: text('confirmed_at'),
+}, (table) => [
+  index('idx_payments_listing_status').on(table.listingId, table.status),
+  uniqueIndex('idx_payments_provider_payment').on(table.provider, table.providerPaymentId),
+]);
+
+export const webhookEvents = sqliteTable('webhook_events', {
+  id: text('id').primaryKey(),
+  provider: text('provider').notNull(),
+  eventType: text('event_type').notNull(),
+  receivedAt: text('received_at').notNull(),
+  processedAt: text('processed_at'),
+}, (table) => [
+  index('idx_webhook_events_provider_processed').on(table.provider, table.processedAt),
+]);
+
+export const requestLimits = sqliteTable('request_limits', {
+  key: text('key').primaryKey(),
+  count: integer('count').notNull().default(1),
+  expiresAt: text('expires_at').notNull(),
+});

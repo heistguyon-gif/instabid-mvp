@@ -1,5 +1,5 @@
 import { createPendingListing } from '@/db/runtime';
-import { isAllowedCategory, normalizeDestination, normalizeInstagramHandle } from '@/lib/validation';
+import { isAllowedCategory, isAllowedListingContent, normalizeDestination, normalizeInstagramHandle } from '@/lib/validation';
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
@@ -21,7 +21,8 @@ export async function POST(request: Request) {
 
   if (!market || name.length < 2 || !handle || description.length < 12 || !destinationUrl ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) || !isAllowedCategory(category) ||
-      !Number.isSafeInteger(requestedBoostMinor) || requestedBoostMinor < minBoostMinor || requestedBoostMinor > 999_999_00) {
+      !Number.isSafeInteger(requestedBoostMinor) || requestedBoostMinor < minBoostMinor || requestedBoostMinor > 999_999_00 ||
+      !isAllowedListingContent(name, description, destinationUrl)) {
     return Response.json({ error: 'invalid_fields' }, { status: 400 });
   }
 
