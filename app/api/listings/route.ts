@@ -1,6 +1,5 @@
 import { createPendingListing } from '@/db/runtime';
-
-const handlePattern = /^@[a-zA-Z0-9._]{1,30}$/;
+import { isAllowedCategory, normalizeDestination, normalizeInstagramHandle } from '@/lib/validation';
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
@@ -12,28 +11,24 @@ export async function POST(request: Request) {
 
   const market = body.market === 'world' ? 'world' : body.market === 'br' ? 'br' : null;
   const name = String(body.name ?? '').trim().slice(0, 60);
-  const rawHandle = String(body.handle ?? '').trim();
-  const handle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
+  const handle = normalizeInstagramHandle(body.handle);
   const description = String(body.description ?? '').trim().slice(0, 220);
   const contactEmail = String(body.contactEmail ?? '').trim().toLowerCase().slice(0, 160);
   const category = String(body.category ?? '').trim().slice(0, 40);
+  const destinationUrl = normalizeDestination(body.destinationUrl);
+  const requestedBoostMinor = Math.round(Number(body.requestedBoostMinor));
+  const minBoostMinor = market === 'world' ? 500 : 1900;
 
-  let destinationUrl: URL;
-  try {
-    destinationUrl = new URL(String(body.destinationUrl ?? ''));
-  } catch {
-    return Response.json({ error: 'invalid_url' }, { status: 400 });
-  }
-
-  if (!market || name.length < 2 || !handlePattern.test(handle) || description.length < 12 ||
-      !contactEmail.includes('@') || category.length < 2 || !['https:', 'http:'].includes(destinationUrl.protocol)) {
+  if (!market || name.length < 2 || !handle || description.length < 12 || !destinationUrl ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) || !isAllowedCategory(category) ||
+      !Number.isSafeInteger(requestedBoostMinor) || requestedBoostMinor < minBoostMinor || requestedBoostMinor > 999_999_00) {
     return Response.json({ error: 'invalid_fields' }, { status: 400 });
   }
 
   try {
     const listing = await createPendingListing({
       market, name, handle: handle.toLowerCase(), description,
-      destinationUrl: destinationUrl.toString(), contactEmail, category,
+      destinationUrl, contactEmail, category, requestedBoostMinor,
     });
     return Response.json({ listing }, { status: 201 });
   } catch (error) {

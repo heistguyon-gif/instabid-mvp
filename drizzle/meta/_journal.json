@@ -8,6 +8,13 @@
       "when": 1787517934516,
       "tag": "0000_odd_maddog",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787530992974,
+      "tag": "0001_remarkable_quentin_quire",
+      "breakpoints": true
     }
   ]
 }

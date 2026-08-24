@@ -26,12 +26,25 @@ export const listings = sqliteTable('listings', {
   destinationUrl: text('destination_url').notNull(),
   contactEmail: text('contact_email').notNull(),
   category: text('category').notNull(),
+  requestedBoostMinor: integer('requested_boost_minor').notNull().default(0),
   status: text('status').notNull().default('pending'),
   clickCount: integer('click_count').notNull().default(0),
   createdAt: text('created_at').notNull(),
 }, (table) => [
   index('idx_listings_market_status').on(table.marketCode, table.status),
   uniqueIndex('idx_listings_market_handle').on(table.marketCode, table.handle),
+]);
+
+export const clickEvents = sqliteTable('click_events', {
+  id: text('id').primaryKey(),
+  listingId: text('listing_id').notNull(),
+  visitorHash: text('visitor_hash').notNull(),
+  windowKey: integer('window_key').notNull(),
+  isCounted: integer('is_counted', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  index('idx_click_events_listing_created').on(table.listingId, table.createdAt),
+  uniqueIndex('idx_click_events_listing_visitor_window').on(table.listingId, table.visitorHash, table.windowKey),
 ]);
 
 export const boosts = sqliteTable('boosts', {
