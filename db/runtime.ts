@@ -75,6 +75,7 @@ const schemaStatements = [
     status TEXT NOT NULL,
     pix_copy_paste TEXT,
     expires_at TEXT,
+    last_checked_at TEXT,
     created_at TEXT NOT NULL,
     confirmed_at TEXT
   )`,
@@ -226,6 +227,7 @@ export type PaymentRecord = {
   status: string;
   pixCopyPaste: string | null;
   expiresAt: string | null;
+  lastCheckedAt: string | null;
 };
 
 export async function getPayment(id: string) {
@@ -233,7 +235,7 @@ export async function getPayment(id: string) {
   const db = await ensureDatabase();
   return db.prepare(`SELECT id, listing_id AS listingId, season_id AS seasonId,
       provider_payment_id AS providerPaymentId, amount_minor AS amountMinor, currency, status,
-      pix_copy_paste AS pixCopyPaste, expires_at AS expiresAt
+      pix_copy_paste AS pixCopyPaste, expires_at AS expiresAt, last_checked_at AS lastCheckedAt
     FROM payments WHERE id = ?`).bind(id).first<PaymentRecord>();
 }
 
@@ -324,6 +326,20 @@ export async function consumeCheckoutRateLimit(visitorKey: string, limit = 5) {
     .bind(visitorKey, expiresAt, now.toISOString(), now.toISOString()).run();
   const record = await db.prepare('SELECT count FROM request_limits WHERE key = ?').bind(visitorKey).first<{ count: number }>();
   return Number(record?.count ?? limit + 1) <= limit;
+}
+
+export async function takePendingPaymentsForReconciliation(limit = 3) {
+  if (isVercel) return [];
+  const db = await ensureDatabase();
+  const threshold = new Date(Date.now() - 30_000).toISOString();
+  const records = await db.prepare(`SELECT id, provider_payment_id AS providerPaymentId
+    FROM payments WHERE provider = 'bravopay' AND status = 'pending' AND provider_payment_id IS NOT NULL
+      AND (last_checked_at IS NULL OR last_checked_at <= ?)
+    ORDER BY created_at ASC LIMIT ?`).bind(threshold, limit).all<{ id: string; providerPaymentId: string }>();
+  if (!records.results.length) return [];
+  const now = new Date().toISOString();
+  await db.batch(records.results.map((record) => db.prepare('UPDATE payments SET last_checked_at = ? WHERE id = ?').bind(now, record.id)));
+  return records.results;
 }
 
 export type RankingPeriod = 'all' | 'today' | 'week';

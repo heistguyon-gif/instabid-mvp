@@ -74,6 +74,7 @@ export const payments = sqliteTable('payments', {
   status: text('status').notNull(),
   pixCopyPaste: text('pix_copy_paste'),
   expiresAt: text('expires_at'),
+  lastCheckedAt: text('last_checked_at'),
   createdAt: text('created_at').notNull(),
   confirmedAt: text('confirmed_at'),
 }, (table) => [
