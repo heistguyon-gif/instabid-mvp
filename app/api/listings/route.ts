@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const category = String(body.category ?? '').trim().slice(0, 40);
   const destinationUrl = normalizeDestination(body.destinationUrl);
   const requestedBoostMinor = Math.round(Number(body.requestedBoostMinor));
-  const minBoostMinor = market === 'world' ? 500 : 1900;
+  const minBoostMinor = 500;
 
   if (!market || name.length < 2 || !handle || description.length < 12 || !destinationUrl ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) || !isAllowedCategory(category) ||

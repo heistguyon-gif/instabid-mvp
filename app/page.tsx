@@ -11,7 +11,7 @@ type CategoryCode = 'All' | 'Creators' | 'Brands' | 'Tools' | 'Services';
 type BoardItem = {
   id: string; rank: number; name: string; handle: string; description: string;
   destinationUrl: string; category: string; bid: string; clicks: string;
-  totalMinor: number; currency: string; tone: string; placementType: string;
+  totalMinor: number; currency: string; tone: string; placementType: string; imageUrl: string | null;
 };
 type BoardMeta = { activeListings: number; totalClicks: number; totalVisitors: number; onlineVisitors: number; generatedAt: string; dataMode: 'demo' | 'pilot' };
 type PaymentView = {
@@ -22,11 +22,11 @@ type CheckoutPreview = { name: string; handle: string; amountMinor: number };
 
 const fallbackBoards: Record<Market, BoardItem[]> = {
   br: [
-    { id: 'partner-nexoflow', rank: 1, name: 'NexoFlow', handle: '@nexoflow.app', description: 'Publique e acompanhe conteúdo profissional em escala.', destinationUrl: 'https://instagram.com/nexoflow.app', category: 'Tools', bid: 'Cortesia', clicks: '0', totalMinor: 0, currency: 'BRL', tone: 'sunset', placementType: 'launch_partner' },
-    { id: 'partner-instabid', rank: 2, name: 'Instabid Brasil', handle: '@instabid.br', description: 'O ranking competitivo de perfis, marcas e projetos do Instagram.', destinationUrl: 'https://instagram.com/instabid.br', category: 'Brands', bid: 'Cortesia', clicks: '0', totalMinor: 0, currency: 'BRL', tone: 'violet', placementType: 'launch_partner' },
+    { id: 'partner-nexoflow', rank: 1, name: 'NexoFlow', handle: '@nexoflow.app', description: 'Publique e acompanhe conteúdo profissional em escala.', destinationUrl: 'https://instagram.com/nexoflow.app', category: 'Tools', bid: 'R$ 0', clicks: '0', totalMinor: 0, currency: 'BRL', tone: 'sunset', placementType: 'launch_partner', imageUrl: '/nexoflow-avatar.ico' },
+    { id: 'partner-instabid', rank: 2, name: 'Instabid Brasil', handle: '@instabid.br', description: 'O ranking competitivo de perfis, marcas e projetos do Instagram.', destinationUrl: 'https://instagram.com/instabid.br', category: 'Brands', bid: 'R$ 0', clicks: '0', totalMinor: 0, currency: 'BRL', tone: 'violet', placementType: 'launch_partner', imageUrl: '/logo-emblem.png' },
   ],
   world: [
-    { id: 'world-hold', rank: 1, name: 'Instabid World', handle: '@instabidworld', description: 'Global ranking em preparação.', destinationUrl: 'https://instagram.com/instabidworld', category: 'Brands', bid: 'Coming soon', clicks: '0', totalMinor: 0, currency: 'USD', tone: 'sunset', placementType: 'launch_partner' },
+    { id: 'world-hold', rank: 1, name: 'Instabid World', handle: '@instabidworld', description: 'Global ranking em preparação.', destinationUrl: 'https://instagram.com/instabidworld', category: 'Brands', bid: 'Coming soon', clicks: '0', totalMinor: 0, currency: 'USD', tone: 'sunset', placementType: 'launch_partner', imageUrl: '/logo-emblem.png' },
   ],
 };
 
@@ -34,9 +34,9 @@ const copy = {
   br: {
     nav: ['Ranking', 'Regras', 'Como funciona'], projects: 'projetos no ranking', measured: 'cliques mensurados', updated: 'atualizado agora',
     demo: 'Ambiente demonstrativo: projetos e números atuais são exemplos. Dados reais entram no piloto.',
-    claim: 'Assuma o #1 por', spots: 'Novas posições começam em R$ 19.', explainer: 'Um valor menor ainda coloca você na melhor posição que ele alcançar.',
+    claim: 'Assuma o #1 por', spots: 'Novas posições começam em R$ 5.', explainer: 'O preço cresce com a disputa: você entra na melhor posição que o lance alcançar.',
     input: 'URL do produto ou @perfil', choose: 'Escolha uma categoria', action: 'Entrar na disputa',
-    already: 'Já está na lista? A função de aumentar um boost existente será liberada durante o piloto.',
+    already: 'Já está na lista? Use o mesmo @ e pague somente a diferença para subir.',
     periods: { week: 'Esta semana', today: 'Últimas 24h', all: 'Histórico' }, categories: { All: 'Todos', Creators: 'Criadores', Brands: 'Marcas', Tools: 'Ferramentas', Services: 'Serviços' },
     clicks: 'cliques válidos', details: 'ver detalhes', rulesTitle: 'Ranking verificável, não caixa-preta',
     rule1: 'Só pagamento confirmado altera posição.', rule2: 'Empate favorece quem chegou primeiro.', rule3: 'Cliques repetidos e robôs não entram na contagem.',
@@ -80,6 +80,13 @@ function localizedCategory(category: string, market: Market) {
   return ({ Creators: 'Criadores', Brands: 'Marcas', Tools: 'Ferramentas', Products: 'Produtos', Services: 'Serviços', Communities: 'Comunidades' } as Record<string, string>)[categoryAliases[category] ?? category] ?? category;
 }
 
+function ProfileAvatar({ item, detail = false }: { item: BoardItem; detail?: boolean }) {
+  const className = `${detail ? 'detail-avatar' : 'avatar'} ${item.tone}`;
+  return <div className={className}>{item.imageUrl
+    ? <Image src={item.imageUrl} alt={`Foto de ${item.handle}`} width={detail ? 100 : 56} height={detail ? 100 : 56} unoptimized />
+    : item.name.slice(0, 1)}</div>;
+}
+
 export default function Home() {
   const [market] = useState<Market>('br');
   const [period, setPeriod] = useState<RankingPeriod>('week');
@@ -92,20 +99,21 @@ export default function Home() {
   const [payment, setPayment] = useState<PaymentView | null>(null);
   const [qrImage, setQrImage] = useState('');
   const [copied, setCopied] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState('');
   const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
   const [checkoutPreview, setCheckoutPreview] = useState<CheckoutPreview | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [quickInput, setQuickInput] = useState('');
   const [quickCategory, setQuickCategory] = useState('');
-  const [formSeed, setFormSeed] = useState({ handle: '', url: '', category: '', boostMajor: 19, requestKey: '' });
-  const [bidMinor, setBidMinor] = useState(1900);
+  const [formSeed, setFormSeed] = useState({ name: '', handle: '', url: '', category: '', boostMajor: 5, requestKey: '' });
+  const [bidMinor, setBidMinor] = useState(500);
   const text = copy[market];
   const boardKey = `${market}:${period}`;
   const board = remoteBoards[boardKey] ?? fallbackBoards[market];
   const meta = boardMeta[boardKey] ?? { activeListings: board.length, totalClicks: 0, totalVisitors: 0, onlineVisitors: 0, generatedAt: '', dataMode: 'pilot' as const };
-  const incrementMinor = market === 'br' ? 1000 : 100;
-  const minBoostMinor = market === 'br' ? 1900 : 500;
+  const incrementMinor = 100;
+  const minBoostMinor = 500;
   const visibleBoard = useMemo(() => category === 'All' ? board : board.filter((item) => (categoryAliases[item.category] ?? item.category) === category), [board, category]);
   const paymentId = payment?.id;
   const paymentStatus = payment?.status;
@@ -118,11 +126,11 @@ export default function Home() {
         const items = payload.listings.map((item, index) => ({
           id: String(item.id), rank: index + 1, name: String(item.name), handle: String(item.handle), description: String(item.description),
           destinationUrl: String(item.destinationUrl), category: String(item.category), totalMinor: Number(item.totalMinor), currency: String(item.currency),
-          bid: String(item.placementType) === 'launch_partner' ? 'Cortesia' : currency(Number(item.totalMinor), String(item.currency), market), clicks: new Intl.NumberFormat(market === 'br' ? 'pt-BR' : 'en-US').format(Number(item.clicks)), tone: tones[index % tones.length], placementType: String(item.placementType ?? 'paid'),
+          bid: currency(Number(item.totalMinor), String(item.currency), market), clicks: new Intl.NumberFormat(market === 'br' ? 'pt-BR' : 'en-US').format(Number(item.clicks)), tone: tones[index % tones.length], placementType: String(item.placementType ?? 'paid'), imageUrl: item.imageUrl ? String(item.imageUrl) : null,
         }));
         setRemoteBoards((current) => ({ ...current, [boardKey]: items }));
         setBoardMeta((current) => ({ ...current, [boardKey]: payload.meta }));
-        if (items.length) setBidMinor(Math.max(market === 'br' ? 1900 : 500, items[0].totalMinor + (market === 'br' ? 1000 : 100)));
+        if (items.length) setBidMinor(Math.max(500, items[0].totalMinor + 100));
       }).catch(() => undefined);
     void loadLeaderboard();
     const timer = window.setInterval(loadLeaderboard, 10_000);
@@ -165,13 +173,13 @@ export default function Home() {
     return () => { active = false; window.clearInterval(timer); };
   }, [submission, paymentId, paymentStatus]);
 
-  function openJoin(targetMinor = bidMinor) {
+  function openJoin(targetMinor = bidMinor, listing?: BoardItem) {
     const value = quickInput.trim();
     const isHandle = value.startsWith('@');
-    const handle = isHandle ? value : '';
-    const url = isHandle ? `https://instagram.com/${value.slice(1)}` : value.startsWith('https://') ? value : '';
-    setFormSeed({ handle, url, category: quickCategory, boostMajor: targetMinor / 100, requestKey: crypto.randomUUID() });
-    setPayment(null); setQrImage(''); setCopied(false); setCheckoutStep(1); setCheckoutPreview(null); setErrorMessage(''); setSubmission('idle'); setJoinOpen(true);
+    const handle = listing?.handle ?? (isHandle ? value : '');
+    const url = listing?.destinationUrl ?? (isHandle ? `https://instagram.com/${value.slice(1)}` : value.startsWith('https://') ? value : '');
+    setFormSeed({ name: listing?.name ?? '', handle, url, category: listing?.category ?? quickCategory, boostMajor: targetMinor / 100, requestKey: crypto.randomUUID() });
+    setPayment(null); setQrImage(''); setCopied(false); setAvatarPreview(''); setCheckoutStep(1); setCheckoutPreview(null); setErrorMessage(''); setSubmission('idle'); setJoinOpen(true);
   }
 
   function continueToPayment(form: HTMLFormElement) {
@@ -192,6 +200,27 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     const requestedBoostMinor = Math.round(Number(form.get('requestedBoostMajor')) * 100);
     const fields = Object.fromEntries(form.entries());
+    const avatar = form.get('avatar');
+    delete fields.avatar;
+    let avatarDataUrl = '';
+    if (avatar instanceof File && avatar.size) {
+      if (avatar.size > 750_000 || !['image/png', 'image/jpeg', 'image/webp'].includes(avatar.type)) {
+        setErrorMessage('Use uma imagem PNG, JPG ou WebP de até 750 KB.');
+        setSubmission('error');
+        return;
+      }
+      avatarDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ''));
+        reader.onerror = () => reject(new Error('avatar_read_failed'));
+        reader.readAsDataURL(avatar);
+      }).catch(() => '');
+      if (!avatarDataUrl) {
+        setErrorMessage('Não foi possível ler essa imagem. Escolha outra e tente novamente.');
+        setSubmission('error');
+        return;
+      }
+    }
     const rawHandle = String(form.get('handle') ?? '').trim();
     const normalizedHandle = rawHandle.replace(/^https?:\/\/(?:www\.)?instagram\.com\//i, '').split(/[/?#]/)[0].replace(/^@/, '');
     const destinationUrl = `https://instagram.com/${normalizedHandle}`;
@@ -208,6 +237,7 @@ export default function Home() {
           handle: `@${normalizedHandle}`,
           destinationUrl,
           description,
+          avatarDataUrl,
           requestedBoostMinor,
           idempotencyKey: formSeed.requestKey,
           contactEmail: form.get('contactEmail'),
@@ -223,6 +253,9 @@ export default function Home() {
         duplicate_handle: 'Esse perfil já está no ranking. Em breve você poderá adicionar um novo boost pelo próprio card.',
         rate_limited: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente novamente.',
         payment_provider_unavailable: 'A BravoPay não conseguiu gerar o Pix agora. Tente novamente em instantes.',
+        boost_too_low: 'Esse perfil já alcançou esse valor. Escolha um lance maior.',
+        invalid_avatar: 'A foto não pôde ser validada. Use PNG, JPG ou WebP de até 750 KB.',
+        payload_too_large: 'A foto é grande demais. Use uma imagem de até 750 KB.',
       };
       setErrorMessage(messages[payload?.error ?? ''] ?? 'Não foi possível gerar o Pix agora. Tente novamente.');
       setSubmission('error');
@@ -272,7 +305,7 @@ export default function Home() {
             {!visibleBoard.length && <p className="empty-board">{text.empty}</p>}
             {visibleBoard.map((item, index) => {
               const challengeMinor = Math.max(minBoostMinor, item.totalMinor + incrementMinor);
-              return <article className={`ranking-card ${index < 3 ? `podium podium-${index + 1}` : 'compact'}`} key={item.id} onClick={() => setSelected(item)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(item); }}><div className="rank-chip">#{item.rank}</div><div className={`avatar ${item.tone}`}>{item.name.slice(0, 1)}</div><div className="project-copy"><strong>{item.name}</strong><p>{item.description}</p><div className="meta-line"><span>{item.handle}</span><span>◇ {localizedCategory(item.category, market)}</span>{item.placementType === 'launch_partner' && <span className="partner-label">Parceiro de lançamento</span>}<b><i /> {item.clicks} {text.clicks}</b></div></div><div className={`bid-value ${item.placementType === 'launch_partner' ? 'courtesy' : ''}`}>{item.bid}</div><button className="detail-trigger" onClick={(event) => { event.stopPropagation(); setSelected(item); }} type="button">{text.details} →</button><button className="rank-challenge" onClick={(event) => { event.stopPropagation(); openJoin(challengeMinor); }} type="button">Superar por {currency(challengeMinor, item.currency, market)}</button></article>;
+              return <article className={`ranking-card ${index < 3 ? `podium podium-${index + 1}` : 'compact'}`} key={item.id} onClick={() => setSelected(item)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(item); }}><div className="rank-chip">#{item.rank}</div><ProfileAvatar item={item} /><div className="project-copy"><strong>{item.name}</strong><p>{item.description}</p><div className="meta-line"><span>{item.handle}</span><span>◇ {localizedCategory(item.category, market)}</span>{item.placementType === 'launch_partner' && <span className="partner-label">Perfil de lançamento</span>}<b><i /> {item.clicks} {text.clicks}</b></div></div><div className="bid-value">{item.bid}</div><button className="detail-trigger" onClick={(event) => { event.stopPropagation(); setSelected(item); }} type="button">{text.details} →</button><button className="rank-challenge" onClick={(event) => { event.stopPropagation(); openJoin(challengeMinor, item); }} type="button">Superar por {currency(challengeMinor, item.currency, market)}</button></article>;
             })}
           </div>
         </section>
@@ -284,7 +317,7 @@ export default function Home() {
 
       <footer><a className="footer-brand" href="#top">Instabid</a><p>{text.footer}</p><nav><a href="/rules">{text.legal[0]}</a><a href="/privacy">{text.legal[1]}</a><a href="/about">{text.legal[2]}</a></nav></footer>
 
-      {selected && <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}><aside className="detail-panel" aria-label={selected.name}><button className="close-button" onClick={() => setSelected(null)} type="button">{text.close} ×</button><div className={`detail-avatar ${selected.tone}`}>{selected.name.slice(0, 1)}</div><p className="detail-rank">#{selected.rank} · {localizedCategory(selected.category, market)}</p><h3>{selected.name}</h3><span className="detail-handle">{selected.handle}</span><p>{selected.description}</p><div className="detail-stats"><div><small>{selected.placementType === 'launch_partner' ? 'entrada' : 'boost'}</small><b>{selected.bid}</b></div><div><small>{text.clicks}</small><b>{selected.clicks}</b></div></div><p className="sponsor-disclosure">◎ {selected.placementType === 'launch_partner' ? 'Parceiro de lançamento · posição cortesia' : text.sponsored}</p><a className="detail-link" href={`/go/${selected.id}`} target="_blank" rel="sponsored noopener noreferrer">{text.visit}<span>↗</span></a><a className="public-page-link" href={`/participant/${selected.id}`}>{text.page}<span>→</span></a><button className="detail-challenge" onClick={() => { setSelected(null); openJoin(Math.max(minBoostMinor, selected.totalMinor + incrementMinor)); }} type="button">{text.challenge}<span>→</span></button></aside></div>}
+      {selected && <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}><aside className="detail-panel" aria-label={selected.name}><button className="close-button" onClick={() => setSelected(null)} type="button">{text.close} ×</button><ProfileAvatar item={selected} detail /><p className="detail-rank">#{selected.rank} · {localizedCategory(selected.category, market)}</p><h3>{selected.name}</h3><span className="detail-handle">{selected.handle}</span><p>{selected.description}</p><div className="detail-stats"><div><small>{selected.placementType === 'launch_partner' ? 'lance atual' : 'boost'}</small><b>{selected.bid}</b></div><div><small>{text.clicks}</small><b>{selected.clicks}</b></div></div><p className="sponsor-disclosure">◎ {selected.placementType === 'launch_partner' ? 'Perfil fundador · aguardando primeiro lance confirmado' : text.sponsored}</p><a className="detail-link" href={`/go/${selected.id}`} target="_blank" rel="sponsored noopener noreferrer">{text.visit}<span>↗</span></a><a className="public-page-link" href={`/participant/${selected.id}`}>{text.page}<span>→</span></a><button className="detail-challenge" onClick={() => { setSelected(null); openJoin(Math.max(minBoostMinor, selected.totalMinor + incrementMinor), selected); }} type="button">{text.challenge}<span>→</span></button></aside></div>}
 
       {joinOpen && <div className="overlay form-overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setJoinOpen(false); }}>
         <section className="join-modal" aria-modal="true" role="dialog" aria-labelledby="join-title">
@@ -308,23 +341,24 @@ export default function Home() {
             <p className="modal-kicker">{market === 'br' ? 'BR · PIX · BRAVOPAY' : 'WORLD · USD'} · {text.sponsored}</p>
             <h3 id="join-title">{text.modalTitle}</h3>
             <p className="modal-intro">{text.modalBody}</p>
-            <form className="checkout-form" key={`${formSeed.handle}:${formSeed.url}:${formSeed.category}:${formSeed.boostMajor}:${formSeed.requestKey}`} onSubmit={submitListing}>
+            <form className="checkout-form" key={`${formSeed.name}:${formSeed.handle}:${formSeed.url}:${formSeed.category}:${formSeed.boostMajor}:${formSeed.requestKey}`} onSubmit={submitListing}>
               {market === 'br' ? <>
                 <div className="checkout-progress full" aria-label={`Etapa ${checkoutStep} de 2`}><span className={checkoutStep === 1 ? 'active' : 'done'}><b>1</b> Perfil e lance</span><i /><span className={checkoutStep === 2 ? 'active' : ''}><b>2</b> Gerar Pix</span></div>
 
                 <div className={`checkout-step full ${checkoutStep === 1 ? 'active' : ''}`} data-checkout-step="project">
                   <label className="full">Perfil do Instagram<input defaultValue={formSeed.handle || formSeed.url} name="handle" required placeholder="@seuperfil" maxLength={80} autoCapitalize="none" autoCorrect="off" /></label>
+                  <label className="avatar-upload full"><span className="avatar-upload-preview">{avatarPreview ? <Image src={avatarPreview} alt="Prévia da foto" width={52} height={52} unoptimized /> : '＋'}</span><span><b>Foto ou logo do perfil</b><small>PNG, JPG ou WebP · até 750 KB</small></span><input accept="image/png,image/jpeg,image/webp" name="avatar" onChange={(event) => { const file = event.target.files?.[0]; setAvatarPreview(file ? URL.createObjectURL(file) : ''); }} type="file" /></label>
                   <div className="checkout-row">
-                    <label>Nome no ranking<input name="name" required minLength={2} maxLength={60} placeholder="Sua marca ou projeto" /></label>
+                    <label>Nome no ranking<input defaultValue={formSeed.name} name="name" required minLength={2} maxLength={60} placeholder="Sua marca ou projeto" /></label>
                     <label>{text.category}<select defaultValue={formSeed.category} name="category" required><option value="" disabled>Selecione</option><option value="Creators">Criadores</option><option value="Products">Produtos</option><option value="Tools">Ferramentas</option><option value="Brands">Marcas</option><option value="Services">Serviços</option><option value="Communities">Comunidades</option></select></label>
                   </div>
-                  <label className="boost-field">Seu lance <span>mínimo R$ 19</span><div><b>R$</b><input defaultValue={formSeed.boostMajor} min={minBoostMinor / 100} max={999999} name="requestedBoostMajor" required step="1" type="number" inputMode="numeric" /></div></label>
-                  <p className="checkout-hint">Você entra imediatamente na melhor posição que esse valor alcançar.</p>
+                  <label className="boost-field">Seu lance <span>mínimo R$ 5</span><div><b>R$</b><input defaultValue={formSeed.boostMajor} min={minBoostMinor / 100} max={999999} name="requestedBoostMajor" required step="1" type="number" inputMode="numeric" /></div></label>
+                  <p className="checkout-hint">Você entra na melhor posição que esse valor alcançar. Se o @ já estiver no ranking, o Pix cobra somente a diferença.</p>
                   <button className="submit-button" onClick={(event) => { if (event.currentTarget.form) continueToPayment(event.currentTarget.form); }} type="button">Continuar para o Pix <span>→</span></button>
                 </div>
 
                 <div className={`checkout-step full ${checkoutStep === 2 ? 'active' : ''}`} data-checkout-step="payment">
-                  <div className="checkout-summary"><div><small>Você está impulsionando</small><strong>{checkoutPreview?.name || 'Seu perfil'} <span>{checkoutPreview?.handle}</span></strong></div><b>{currency(checkoutPreview?.amountMinor || 1900, 'BRL', 'br')}</b></div>
+                  <div className="checkout-summary"><div><small>Você está impulsionando</small><strong>{checkoutPreview?.name || 'Seu perfil'} <span>{checkoutPreview?.handle}</span></strong></div><b>{currency(checkoutPreview?.amountMinor || 500, 'BRL', 'br')}</b></div>
                   <p className="payment-data-title">Dados para gerar o Pix <span>Pagamento seguro pela BravoPay</span></p>
                   <label className="full">Nome completo<input autoComplete="name" name="buyerName" required minLength={5} placeholder="Como aparece no CPF" /></label>
                   <div className="checkout-row">
@@ -333,7 +367,7 @@ export default function Home() {
                   </div>
                   {submission === 'error' && <p className="form-error">{errorMessage}</p>}
                   <p className="form-disclosure">Seu perfil só sobe após o pagamento ser confirmado. Se outra pessoa superar seu lance depois, não há reembolso automático.</p>
-                  <div className="checkout-actions"><button className="checkout-back" onClick={() => { setSubmission('idle'); setErrorMessage(''); setCheckoutStep(1); }} type="button">← Voltar</button><button className="submit-button" disabled={submission === 'sending'} type="submit">{submission === 'sending' ? text.sending : `Gerar Pix de ${currency(checkoutPreview?.amountMinor || 1900, 'BRL', 'br')}`}<span>↗</span></button></div>
+                  <div className="checkout-actions"><button className="checkout-back" onClick={() => { setSubmission('idle'); setErrorMessage(''); setCheckoutStep(1); }} type="button">← Voltar</button><button className="submit-button" disabled={submission === 'sending'} type="submit">{submission === 'sending' ? text.sending : `Gerar Pix`}<span>↗</span></button></div>
                 </div>
               </> : <>
                 <label>{text.name}<input name="name" required minLength={2} maxLength={60} /></label>

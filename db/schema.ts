@@ -24,6 +24,7 @@ export const listings = sqliteTable('listings', {
   handle: text('handle').notNull(),
   description: text('description').notNull(),
   destinationUrl: text('destination_url').notNull(),
+  imageUrl: text('image_url'),
   contactEmail: text('contact_email').notNull(),
   category: text('category').notNull(),
   requestedBoostMinor: integer('requested_boost_minor').notNull().default(0),

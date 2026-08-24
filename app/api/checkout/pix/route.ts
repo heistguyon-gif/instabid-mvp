@@ -8,6 +8,7 @@ import {
   markPaymentFailed,
   prepareListingForPayment,
   consumeCheckoutRateLimit,
+  storeListingAvatar,
 } from '@/db/runtime';
 
 const json = (value: unknown, status = 200) => Response.json(value, {
@@ -29,9 +30,12 @@ function tracking(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  if (Number(request.headers.get('content-length') ?? 0) > 1_500_000) return json({ error: 'payload_too_large' }, 413);
   let body: Record<string, unknown>;
   try {
-    body = await request.json() as Record<string, unknown>;
+    const raw = await request.text();
+    if (raw.length > 1_500_000) return json({ error: 'payload_too_large' }, 413);
+    body = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return json({ error: 'invalid_json' }, 400);
   }
@@ -53,7 +57,7 @@ export async function POST(request: Request) {
   const requestedBoostMinor = Math.round(Number(body.requestedBoostMinor));
   if (!buyer || name.length < 2 || !handle || description.length < 12 || !destinationUrl ||
       contactEmail !== buyer.email || !isAllowedCategory(category) || !Number.isSafeInteger(requestedBoostMinor) ||
-      requestedBoostMinor < 1900 || requestedBoostMinor > 999_999_00 || !isAllowedListingContent(name, description, destinationUrl)) {
+      requestedBoostMinor < 500 || requestedBoostMinor > 999_999_00 || !isAllowedListingContent(name, description, destinationUrl)) {
     return json({ error: 'invalid_fields' }, 400);
   }
 
@@ -70,17 +74,19 @@ export async function POST(request: Request) {
       market: 'br', name, handle: handle.toLowerCase(), description, destinationUrl,
       contactEmail, category, requestedBoostMinor,
     });
+    const avatarDataUrl = String(body.avatarDataUrl ?? '');
+    if (avatarDataUrl && listing.mayUpdateProfile) await storeListingAvatar(listing.listingId, avatarDataUrl);
     const payment = await createPaymentAttempt({
-      id: paymentId, listingId: listing.listingId, seasonId: listing.seasonId, amountMinor: requestedBoostMinor,
+      id: paymentId, listingId: listing.listingId, seasonId: listing.seasonId, amountMinor: listing.chargeMinor,
     });
-    if (!payment || payment.listingId !== listing.listingId || payment.amountMinor !== requestedBoostMinor) {
+    if (!payment || payment.listingId !== listing.listingId || payment.amountMinor !== listing.chargeMinor) {
       return json({ error: 'idempotency_conflict' }, 409);
     }
     const transaction = await createBravopayPix({
       paymentId,
       listingId: listing.listingId,
       seasonId: listing.seasonId,
-      amountMinor: requestedBoostMinor,
+      amountMinor: listing.chargeMinor,
       buyer,
       tracking: tracking(body.tracking),
     });
@@ -95,6 +101,8 @@ export async function POST(request: Request) {
     }
     const message = error instanceof Error ? error.message : '';
     if (message.includes('duplicate_handle')) return json({ error: 'duplicate_handle' }, 409);
+    if (message.includes('boost_too_low')) return json({ error: 'boost_too_low' }, 409);
+    if (message.includes('invalid_avatar')) return json({ error: 'invalid_avatar' }, 400);
     if (message.includes('persistent_database_unavailable')) return json({ error: 'preview_only' }, 503);
     return json({ error: 'payment_creation_failed' }, 500);
   }

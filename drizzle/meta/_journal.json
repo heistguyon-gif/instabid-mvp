@@ -43,6 +43,13 @@
       "when": 1787548451940,
       "tag": "0005_little_squirrel_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787550267025,
+      "tag": "0006_short_vapor",
+      "breakpoints": true
     }
   ]
 }

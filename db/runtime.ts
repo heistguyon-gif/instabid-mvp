@@ -31,6 +31,7 @@ const schemaStatements = [
     handle TEXT NOT NULL,
     description TEXT NOT NULL,
     destination_url TEXT NOT NULL,
+    image_url TEXT,
     contact_email TEXT NOT NULL,
     category TEXT NOT NULL,
     requested_boost_minor INTEGER NOT NULL DEFAULT 0,
@@ -104,8 +105,8 @@ const schemaStatements = [
 ];
 
 const demoListings = [
-  ['partner-nexoflow', 'br', 'NexoFlow', '@nexoflow.app', 'Gestão e publicação profissional de conteúdo no Instagram.', 'https://instagram.com/nexoflow.app', 'parceiros@instabid.br', 'Tools', '0', 'launch_partner'],
-  ['partner-instabid', 'br', 'Instabid', '@instabid.br', 'Perfil oficial da disputa brasileira por atenção.', 'https://instagram.com/instabid.br', 'parceiros@instabid.br', 'Communities', '0', 'launch_partner'],
+  ['partner-nexoflow', 'br', 'NexoFlow', '@nexoflow.app', 'Gestão e publicação profissional de conteúdo no Instagram.', 'https://instagram.com/nexoflow.app', '/nexoflow-avatar.ico', 'parceiros@instabid.br', 'Tools', '0', 'launch_partner'],
+  ['partner-instabid', 'br', 'Instabid', '@instabid.br', 'Perfil oficial da disputa brasileira por atenção.', 'https://instagram.com/instabid.br', '/logo-emblem.png', 'parceiros@instabid.br', 'Communities', '0', 'launch_partner'],
 ] as const;
 
 const demoBoosts: ReadonlyArray<readonly [string, string, number, string]> = [];
@@ -122,18 +123,24 @@ export async function ensureDatabase() {
   if (!listingColumns.results.some((column) => column.name === 'placement_type')) {
     await db.prepare("ALTER TABLE listings ADD COLUMN placement_type TEXT NOT NULL DEFAULT 'paid'").run();
   }
+  if (!listingColumns.results.some((column) => column.name === 'image_url')) {
+    await db.prepare('ALTER TABLE listings ADD COLUMN image_url TEXT').run();
+  }
   await db.batch([
-    db.prepare("INSERT OR IGNORE INTO markets (code, locale, currency, min_boost_minor, status) VALUES ('br', 'pt-BR', 'BRL', 1900, 'active')"),
+    db.prepare("INSERT OR IGNORE INTO markets (code, locale, currency, min_boost_minor, status) VALUES ('br', 'pt-BR', 'BRL', 500, 'active')"),
+    db.prepare("UPDATE markets SET min_boost_minor = 500 WHERE code = 'br'"),
     db.prepare("INSERT OR IGNORE INTO markets (code, locale, currency, min_boost_minor, status) VALUES ('world', 'en', 'USD', 500, 'active')"),
     db.prepare("INSERT OR IGNORE INTO seasons (id, market_code, label, starts_at, ends_at, status) VALUES ('br-s34', 'br', 'Semana 34', '2026-08-17T03:00:00.000Z', '2026-08-24T02:59:59.000Z', 'active')"),
     db.prepare("INSERT OR IGNORE INTO seasons (id, market_code, label, starts_at, ends_at, status) VALUES ('world-s34', 'world', 'Week 34', '2026-08-17T00:00:00.000Z', '2026-08-24T00:00:00.000Z', 'active')"),
+    db.prepare("UPDATE listings SET image_url = '/nexoflow-avatar.ico' WHERE id = 'partner-nexoflow'"),
+    db.prepare("UPDATE listings SET image_url = '/logo-emblem.png' WHERE id = 'partner-instabid'"),
   ]);
 
-  for (const [id, market, name, handle, description, url, email, category, clicks, placementType] of demoListings) {
+  for (const [id, market, name, handle, description, url, imageUrl, email, category, clicks, placementType] of demoListings) {
     await db.prepare(`INSERT OR IGNORE INTO listings
-      (id, market_code, name, handle, description, destination_url, contact_email, category, placement_type, status, click_count, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, '2026-08-24T04:30:00.000Z')`)
-      .bind(id, market, name, handle, description, url, email, category, placementType, Number(clicks)).run();
+      (id, market_code, name, handle, description, destination_url, image_url, contact_email, category, placement_type, status, click_count, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, '2026-08-24T04:30:00.000Z')`)
+      .bind(id, market, name, handle, description, url, imageUrl, email, category, placementType, Number(clicks)).run();
   }
   for (const [listingId, seasonId, amount, currency] of demoBoosts) {
     await db.prepare(`INSERT OR IGNORE INTO boosts
@@ -192,6 +199,7 @@ export type ListingPaymentInput = {
 export async function prepareListingForPayment(input: ListingPaymentInput) {
   if (isVercel) throw new Error('persistent_database_unavailable_in_vercel_preview');
   const db = await ensureDatabase();
+  const season = await getActiveSeason(db, 'br');
   const existing = await db.prepare(`SELECT id, status, contact_email AS contactEmail
     FROM listings WHERE market_code = 'br' AND handle = ?`).bind(input.handle).first<{ id: string; status: string; contactEmail: string }>();
   let listingId = existing?.id;
@@ -208,8 +216,46 @@ export async function prepareListingForPayment(input: ListingPaymentInput) {
       requested_boost_minor = ?, status = 'pending_payment' WHERE id = ?`)
       .bind(input.name, input.description, input.destinationUrl, input.category, input.requestedBoostMinor, listingId).run();
   }
-  const season = await getActiveSeason(db, 'br');
-  return { listingId, seasonId: season.id };
+  const current = await db.prepare(`SELECT COALESCE(SUM(amount_minor), 0) AS totalMinor
+    FROM boosts WHERE listing_id = ? AND season_id = ? AND status = 'confirmed'`)
+    .bind(listingId, season.id).first<{ totalMinor: number }>();
+  const currentTotalMinor = Number(current?.totalMinor ?? 0);
+  if (input.requestedBoostMinor <= currentTotalMinor) throw new Error('boost_too_low');
+  return {
+    listingId,
+    seasonId: season.id,
+    currentTotalMinor,
+    chargeMinor: input.requestedBoostMinor - currentTotalMinor,
+    mayUpdateProfile: !existing || existing.contactEmail === input.contactEmail,
+  };
+}
+
+function parseAvatarDataUrl(value: string) {
+  const match = /^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/=]+)$/i.exec(value);
+  if (!match) throw new Error('invalid_avatar');
+  const bytes = Uint8Array.from(atob(match[2]), (character) => character.charCodeAt(0));
+  if (!bytes.length || bytes.length > 750_000) throw new Error('invalid_avatar');
+  const mime = match[1].toLowerCase();
+  const valid = mime === 'image/png'
+    ? bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+    : mime === 'image/jpeg'
+      ? bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+      : bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+  if (!valid) throw new Error('invalid_avatar');
+  return { bytes, mime };
+}
+
+export async function storeListingAvatar(listingId: string, dataUrl: string) {
+  if (isVercel || !dataUrl) return null;
+  const { bytes, mime } = parseAvatarDataUrl(dataUrl);
+  const runtime = await import('cloudflare:workers') as { env: { FILES: R2Bucket } };
+  await runtime.env.FILES.put(`avatars/${listingId}`, bytes, {
+    httpMetadata: { contentType: mime, cacheControl: 'public, max-age=31536000, immutable' },
+  });
+  const imageUrl = `/api/avatar/${listingId}`;
+  const db = await ensureDatabase();
+  await db.prepare('UPDATE listings SET image_url = ? WHERE id = ?').bind(imageUrl, listingId).run();
+  return imageUrl;
 }
 
 export type PaymentRecord = {
@@ -365,10 +411,10 @@ export async function getLeaderboard(market: 'br' | 'world', period: RankingPeri
   if (isVercel) {
     return demoListings
       .filter((listing) => listing[1] === market)
-      .map(([id, marketCode, name, handle, description, destinationUrl, , category, clicks, placementType]) => {
+      .map(([id, marketCode, name, handle, description, destinationUrl, imageUrl, , category, clicks, placementType]) => {
         const boost = demoBoosts.find(([listingId]) => listingId === id);
         return {
-          id, name, handle, description, destinationUrl, category, clicks: Number(clicks), placementType,
+          id, name, handle, description, destinationUrl, imageUrl, category, clicks: Number(clicks), placementType,
           currency: boost?.[3] ?? (marketCode === 'br' ? 'BRL' : 'USD'),
           seasonId: marketCode === 'br' ? 'br-s34' : 'world-s34',
           seasonLabel: marketCode === 'br' ? 'Semana 34' : 'Week 34',
@@ -386,7 +432,7 @@ export async function getLeaderboard(market: 'br' | 'world', period: RankingPeri
       ? "LEFT JOIN boosts b ON b.listing_id = l.id AND b.status = 'confirmed' AND datetime(b.created_at) >= datetime('now', '-1 day')"
       : "LEFT JOIN boosts b ON b.listing_id = l.id AND b.season_id = s.id AND b.status = 'confirmed'";
   const result = await db.prepare(`SELECT
-      l.id, l.name, l.handle, l.description, l.destination_url AS destinationUrl,
+      l.id, l.name, l.handle, l.description, l.destination_url AS destinationUrl, l.image_url AS imageUrl,
       l.category, l.placement_type AS placementType, l.click_count AS clicks, m.currency, s.id AS seasonId, s.label AS seasonLabel,
       s.ends_at AS endsAt, l.created_at AS createdAt, MAX(b.created_at) AS totalReachedAt,
       COALESCE(SUM(b.amount_minor), 0) AS totalMinor
@@ -422,13 +468,13 @@ export async function getListingById(id: string) {
   if (isVercel) {
     const listing = demoListings.find(([listingId]) => listingId === id);
     if (!listing) return null;
-    const [listingId, marketCode, name, handle, description, destinationUrl, , category, clicks, placementType] = listing;
+    const [listingId, marketCode, name, handle, description, destinationUrl, imageUrl, , category, clicks, placementType] = listing;
     const boost = demoBoosts.find(([boostListingId]) => boostListingId === listingId);
-    return { id: listingId, marketCode, name, handle, description, destinationUrl, category, placementType, clicks: Number(clicks), totalMinor: boost?.[2] ?? 0, currency: boost?.[3] ?? (marketCode === 'br' ? 'BRL' : 'USD') };
+    return { id: listingId, marketCode, name, handle, description, destinationUrl, imageUrl, category, placementType, clicks: Number(clicks), totalMinor: boost?.[2] ?? 0, currency: boost?.[3] ?? (marketCode === 'br' ? 'BRL' : 'USD') };
   }
   const db = await ensureDatabase();
   return db.prepare(`SELECT l.id, l.market_code AS marketCode, l.name, l.handle, l.description,
-      l.destination_url AS destinationUrl, l.category, l.placement_type AS placementType, l.click_count AS clicks, m.currency,
+      l.destination_url AS destinationUrl, l.image_url AS imageUrl, l.category, l.placement_type AS placementType, l.click_count AS clicks, m.currency,
       COALESCE(SUM(b.amount_minor), 0) AS totalMinor
     FROM listings l
     JOIN markets m ON m.code = l.market_code
