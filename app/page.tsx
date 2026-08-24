@@ -11,9 +11,9 @@ type CategoryCode = 'All' | 'Creators' | 'Brands' | 'Tools' | 'Services';
 type BoardItem = {
   id: string; rank: number; name: string; handle: string; description: string;
   destinationUrl: string; category: string; bid: string; clicks: string;
-  totalMinor: number; currency: string; tone: string;
+  totalMinor: number; currency: string; tone: string; placementType: string;
 };
-type BoardMeta = { activeListings: number; totalClicks: number; generatedAt: string; dataMode: 'demo' | 'pilot' };
+type BoardMeta = { activeListings: number; totalClicks: number; totalVisitors: number; onlineVisitors: number; generatedAt: string; dataMode: 'demo' | 'pilot' };
 type PaymentView = {
   id: string; status: string; amountMinor: number; currency: string;
   pixCopyPaste: string | null; expiresAt: string | null;
@@ -22,18 +22,11 @@ type CheckoutPreview = { name: string; handle: string; amountMinor: number };
 
 const fallbackBoards: Record<Market, BoardItem[]> = {
   br: [
-    { id: 'br-nexoflow', rank: 1, name: 'NexoFlow', handle: '@nexoflow.app', description: 'Publique e acompanhe conteúdo profissional em escala.', destinationUrl: 'https://instagram.com/nexoflow.app', category: 'Tools', bid: 'R$ 480', clicks: '1.284', totalMinor: 48000, currency: 'BRL', tone: 'sunset' },
-    { id: 'br-atlas', rank: 2, name: 'Clube Atlas', handle: '@clubeatlas.br', description: 'Comunidade para creators construindo negócios digitais.', destinationUrl: 'https://instagram.com/clubeatlas.br', category: 'Creators', bid: 'R$ 390', clicks: '946', totalMinor: 39000, currency: 'BRL', tone: 'violet' },
-    { id: 'br-marca', rank: 3, name: 'Marca em Jogo', handle: '@marcaemjogo', description: 'Estratégia de marca para quem vende pela internet.', destinationUrl: 'https://instagram.com/marcaemjogo', category: 'Services', bid: 'R$ 270', clicks: '721', totalMinor: 27000, currency: 'BRL', tone: 'pink' },
-    { id: 'br-creatoros', rank: 4, name: 'CreatorOS', handle: '@creatoros.br', description: 'Operação simples para creators profissionais.', destinationUrl: 'https://instagram.com/creatoros.br', category: 'Tools', bid: 'R$ 190', clicks: '508', totalMinor: 19000, currency: 'BRL', tone: 'blue' },
-    { id: 'br-neblina', rank: 5, name: 'Loja Neblina', handle: '@loj_neblina', description: 'Produtos autorais em pequenas coleções.', destinationUrl: 'https://instagram.com/loj_neblina', category: 'Brands', bid: 'R$ 120', clicks: '364', totalMinor: 12000, currency: 'BRL', tone: 'orange' },
+    { id: 'partner-nexoflow', rank: 1, name: 'NexoFlow', handle: '@nexoflow.app', description: 'Publique e acompanhe conteúdo profissional em escala.', destinationUrl: 'https://instagram.com/nexoflow.app', category: 'Tools', bid: 'Cortesia', clicks: '0', totalMinor: 0, currency: 'BRL', tone: 'sunset', placementType: 'launch_partner' },
+    { id: 'partner-instabid', rank: 2, name: 'Instabid Brasil', handle: '@instabid.br', description: 'O ranking competitivo de perfis, marcas e projetos do Instagram.', destinationUrl: 'https://instagram.com/instabid.br', category: 'Brands', bid: 'Cortesia', clicks: '0', totalMinor: 0, currency: 'BRL', tone: 'violet', placementType: 'launch_partner' },
   ],
   world: [
-    { id: 'world-orbit', rank: 1, name: 'Orbit Tools', handle: '@orbit.tools', description: 'Tiny tools for ambitious internet businesses.', destinationUrl: 'https://instagram.com/orbit.tools', category: 'Tools', bid: '$320', clicks: '1,108', totalMinor: 32000, currency: 'USD', tone: 'sunset' },
-    { id: 'world-luna', rank: 2, name: 'Made by Luna', handle: '@madebyluna', description: 'A creator-led studio for thoughtful digital products.', destinationUrl: 'https://instagram.com/madebyluna', category: 'Creators', bid: '$255', clicks: '879', totalMinor: 25500, currency: 'USD', tone: 'violet' },
-    { id: 'world-tiny', rank: 3, name: 'Tiny Launch', handle: '@tinylaunch', description: 'Launch small products with a focused audience.', destinationUrl: 'https://instagram.com/tinylaunch', category: 'Products', bid: '$180', clicks: '644', totalMinor: 18000, currency: 'USD', tone: 'pink' },
-    { id: 'world-prompt', rank: 4, name: 'Prompt Club', handle: '@promptclub', description: 'Practical AI workflows for creative teams.', destinationUrl: 'https://instagram.com/promptclub', category: 'Communities', bid: '$96', clicks: '401', totalMinor: 9600, currency: 'USD', tone: 'blue' },
-    { id: 'world-north', rank: 5, name: 'North Studio', handle: '@northstudio', description: 'Brand and web work for independent founders.', destinationUrl: 'https://instagram.com/northstudio', category: 'Services', bid: '$72', clicks: '295', totalMinor: 7200, currency: 'USD', tone: 'orange' },
+    { id: 'world-hold', rank: 1, name: 'Instabid World', handle: '@instabidworld', description: 'Global ranking em preparação.', destinationUrl: 'https://instagram.com/instabidworld', category: 'Brands', bid: 'Coming soon', clicks: '0', totalMinor: 0, currency: 'USD', tone: 'sunset', placementType: 'launch_partner' },
   ],
 };
 
@@ -88,7 +81,7 @@ function localizedCategory(category: string, market: Market) {
 }
 
 export default function Home() {
-  const [market, setMarket] = useState<Market>('br');
+  const [market] = useState<Market>('br');
   const [period, setPeriod] = useState<RankingPeriod>('week');
   const [category, setCategory] = useState<CategoryCode>('All');
   const [remoteBoards, setRemoteBoards] = useState<Record<string, BoardItem[]>>({});
@@ -110,7 +103,7 @@ export default function Home() {
   const text = copy[market];
   const boardKey = `${market}:${period}`;
   const board = remoteBoards[boardKey] ?? fallbackBoards[market];
-  const meta = boardMeta[boardKey] ?? { activeListings: board.length, totalClicks: board.reduce((sum, item) => sum + Number(item.clicks.replace(/\D/g, '')), 0), generatedAt: '', dataMode: 'demo' as const };
+  const meta = boardMeta[boardKey] ?? { activeListings: board.length, totalClicks: 0, totalVisitors: 0, onlineVisitors: 0, generatedAt: '', dataMode: 'pilot' as const };
   const incrementMinor = market === 'br' ? 1000 : 100;
   const minBoostMinor = market === 'br' ? 1900 : 500;
   const visibleBoard = useMemo(() => category === 'All' ? board : board.filter((item) => (categoryAliases[item.category] ?? item.category) === category), [board, category]);
@@ -119,20 +112,29 @@ export default function Home() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/leaderboard?market=${market}&period=${period}`, { signal: controller.signal })
+    const loadLeaderboard = () => fetch(`/api/leaderboard?market=${market}&period=${period}`, { signal: controller.signal, cache: 'no-store' })
       .then((response) => response.ok ? response.json() as Promise<{ listings: Array<Record<string, unknown>>; meta: BoardMeta }> : Promise.reject())
       .then((payload) => {
         const items = payload.listings.map((item, index) => ({
           id: String(item.id), rank: index + 1, name: String(item.name), handle: String(item.handle), description: String(item.description),
           destinationUrl: String(item.destinationUrl), category: String(item.category), totalMinor: Number(item.totalMinor), currency: String(item.currency),
-          bid: currency(Number(item.totalMinor), String(item.currency), market), clicks: new Intl.NumberFormat(market === 'br' ? 'pt-BR' : 'en-US').format(Number(item.clicks)), tone: tones[index % tones.length],
+          bid: String(item.placementType) === 'launch_partner' ? 'Cortesia' : currency(Number(item.totalMinor), String(item.currency), market), clicks: new Intl.NumberFormat(market === 'br' ? 'pt-BR' : 'en-US').format(Number(item.clicks)), tone: tones[index % tones.length], placementType: String(item.placementType ?? 'paid'),
         }));
-        if (items.length) setRemoteBoards((current) => ({ ...current, [boardKey]: items }));
+        setRemoteBoards((current) => ({ ...current, [boardKey]: items }));
         setBoardMeta((current) => ({ ...current, [boardKey]: payload.meta }));
         if (items.length) setBidMinor(Math.max(market === 'br' ? 1900 : 500, items[0].totalMinor + (market === 'br' ? 1000 : 100)));
       }).catch(() => undefined);
-    return () => controller.abort();
+    void loadLeaderboard();
+    const timer = window.setInterval(loadLeaderboard, 10_000);
+    return () => { controller.abort(); window.clearInterval(timer); };
   }, [market, period, boardKey, refreshNonce]);
+
+  useEffect(() => {
+    const registerPresence = () => fetch('/api/visit', { method: 'POST', cache: 'no-store' }).catch(() => undefined);
+    void registerPresence();
+    const timer = window.setInterval(registerPresence, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!payment?.pixCopyPaste) return;
@@ -162,11 +164,6 @@ export default function Home() {
     void check();
     return () => { active = false; window.clearInterval(timer); };
   }, [submission, paymentId, paymentStatus]);
-
-  function chooseMarket(next: Market) {
-    const nextIncrement = next === 'br' ? 1000 : 100;
-    setMarket(next); setBidMinor(fallbackBoards[next][0].totalMinor + nextIncrement); setSelected(null); setSubmission('idle'); setPayment(null); setCheckoutStep(1); setCategory('All'); setQuickCategory('');
-  }
 
   function openJoin(targetMinor = bidMinor) {
     const value = quickInput.trim();
@@ -253,14 +250,13 @@ export default function Home() {
   return (
     <main className="site-shell" id="top">
       <header className="topbar">
-        <a className="brand-plate" href="#top" aria-label="Instabid home"><BrandMark /></a>
+        <a className="brand-plate" href="/br" aria-label="Instabid Brasil"><BrandMark /></a>
         <nav className="desktop-nav" aria-label="Navegação principal"><a href="#ranking">{text.nav[0]}</a><a href="/rules">{text.nav[1]}</a><a href="#como-funciona">{text.nav[2]}</a></nav>
-        <div className="market-switch" aria-label="Escolha o mercado"><button className={market === 'br' ? 'active' : ''} onClick={() => chooseMarket('br')} type="button">BR</button><button className={market === 'world' ? 'active' : ''} onClick={() => chooseMarket('world')} type="button">WORLD</button></div>
+        <div className="market-switch" aria-label="Escolha o mercado"><a className="active" href="/br">BR</a><a href="/world">WORLD</a></div>
       </header>
 
       <div className="page-column">
-        <section className="live-summary"><span className="online-dot" /><strong>{meta.activeListings} {text.projects}</strong><span>·</span><span>{new Intl.NumberFormat(market === 'br' ? 'pt-BR' : 'en-US').format(meta.totalClicks)} {text.measured}</span><a href="#ranking">{text.updated} ↻</a></section>
-        {meta.dataMode === 'demo' && <p className="demo-disclosure">{text.demo}</p>}
+        <section className="live-summary"><span className="online-dot" /><strong>{meta.onlineVisitors} online</strong><span>·</span><span>{new Intl.NumberFormat('pt-BR').format(meta.totalVisitors)} visitantes</span><span>·</span><span>{new Intl.NumberFormat('pt-BR').format(meta.totalClicks)} {text.measured}</span><a href="#ranking">tempo real ↻</a></section>
 
         <section className="bid-hero" id="como-funciona">
           <div className="period-switch" aria-label="Período do ranking">{(['week', 'today', 'all'] as RankingPeriod[]).map((value) => <button className={period === value ? 'active' : ''} key={value} onClick={() => setPeriod(value)} type="button">{value === 'week' && '♛ '}{text.periods[value]}</button>)}</div>
@@ -274,7 +270,10 @@ export default function Home() {
           <div className="category-tabs" id="categorias">{categoryCodes.map((code, index) => <button className={category === code ? 'active' : ''} key={code} onClick={() => setCategory(code)} type="button"><i>{['▦', '◉', '◆', '⌁', '✦'][index]}</i>{text.categories[code]}</button>)}</div>
           <div className="ranking-list">
             {!visibleBoard.length && <p className="empty-board">{text.empty}</p>}
-            {visibleBoard.map((item, index) => <article className={`ranking-card ${index < 3 ? `podium podium-${index + 1}` : 'compact'}`} key={item.id} onClick={() => setSelected(item)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(item); }}><div className="rank-chip">#{item.rank}</div><div className={`avatar ${item.tone}`}>{item.name.slice(0, 1)}</div><div className="project-copy"><strong>{item.name}</strong><p>{item.description}</p><div className="meta-line"><span>{item.handle}</span><span>◇ {localizedCategory(item.category, market)}</span><b><i /> {item.clicks} {text.clicks}</b></div></div><div className="bid-value">{item.bid}</div><button className="detail-trigger" onClick={(event) => { event.stopPropagation(); setSelected(item); }} type="button">{text.details} →</button><button className="rank-challenge" onClick={(event) => { event.stopPropagation(); openJoin(item.totalMinor + incrementMinor); }} type="button">{market === 'br' ? 'Superar por' : 'Beat for'} {currency(item.totalMinor + incrementMinor, item.currency, market)}</button></article>)}
+            {visibleBoard.map((item, index) => {
+              const challengeMinor = Math.max(minBoostMinor, item.totalMinor + incrementMinor);
+              return <article className={`ranking-card ${index < 3 ? `podium podium-${index + 1}` : 'compact'}`} key={item.id} onClick={() => setSelected(item)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(item); }}><div className="rank-chip">#{item.rank}</div><div className={`avatar ${item.tone}`}>{item.name.slice(0, 1)}</div><div className="project-copy"><strong>{item.name}</strong><p>{item.description}</p><div className="meta-line"><span>{item.handle}</span><span>◇ {localizedCategory(item.category, market)}</span>{item.placementType === 'launch_partner' && <span className="partner-label">Parceiro de lançamento</span>}<b><i /> {item.clicks} {text.clicks}</b></div></div><div className={`bid-value ${item.placementType === 'launch_partner' ? 'courtesy' : ''}`}>{item.bid}</div><button className="detail-trigger" onClick={(event) => { event.stopPropagation(); setSelected(item); }} type="button">{text.details} →</button><button className="rank-challenge" onClick={(event) => { event.stopPropagation(); openJoin(challengeMinor); }} type="button">Superar por {currency(challengeMinor, item.currency, market)}</button></article>;
+            })}
           </div>
         </section>
 
@@ -285,7 +284,7 @@ export default function Home() {
 
       <footer><a className="footer-brand" href="#top">Instabid</a><p>{text.footer}</p><nav><a href="/rules">{text.legal[0]}</a><a href="/privacy">{text.legal[1]}</a><a href="/about">{text.legal[2]}</a></nav></footer>
 
-      {selected && <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}><aside className="detail-panel" aria-label={selected.name}><button className="close-button" onClick={() => setSelected(null)} type="button">{text.close} ×</button><div className={`detail-avatar ${selected.tone}`}>{selected.name.slice(0, 1)}</div><p className="detail-rank">#{selected.rank} · {localizedCategory(selected.category, market)}</p><h3>{selected.name}</h3><span className="detail-handle">{selected.handle}</span><p>{selected.description}</p><div className="detail-stats"><div><small>boost</small><b>{selected.bid}</b></div><div><small>{text.clicks}</small><b>{selected.clicks}</b></div></div><p className="sponsor-disclosure">◎ {text.sponsored}</p><a className="detail-link" href={`/go/${selected.id}`} target="_blank" rel="sponsored noopener noreferrer">{text.visit}<span>↗</span></a><a className="public-page-link" href={`/participant/${selected.id}`}>{text.page}<span>→</span></a><button className="detail-challenge" onClick={() => { setSelected(null); openJoin(selected.totalMinor + incrementMinor); }} type="button">{text.challenge}<span>→</span></button></aside></div>}
+      {selected && <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}><aside className="detail-panel" aria-label={selected.name}><button className="close-button" onClick={() => setSelected(null)} type="button">{text.close} ×</button><div className={`detail-avatar ${selected.tone}`}>{selected.name.slice(0, 1)}</div><p className="detail-rank">#{selected.rank} · {localizedCategory(selected.category, market)}</p><h3>{selected.name}</h3><span className="detail-handle">{selected.handle}</span><p>{selected.description}</p><div className="detail-stats"><div><small>{selected.placementType === 'launch_partner' ? 'entrada' : 'boost'}</small><b>{selected.bid}</b></div><div><small>{text.clicks}</small><b>{selected.clicks}</b></div></div><p className="sponsor-disclosure">◎ {selected.placementType === 'launch_partner' ? 'Parceiro de lançamento · posição cortesia' : text.sponsored}</p><a className="detail-link" href={`/go/${selected.id}`} target="_blank" rel="sponsored noopener noreferrer">{text.visit}<span>↗</span></a><a className="public-page-link" href={`/participant/${selected.id}`}>{text.page}<span>→</span></a><button className="detail-challenge" onClick={() => { setSelected(null); openJoin(Math.max(minBoostMinor, selected.totalMinor + incrementMinor)); }} type="button">{text.challenge}<span>→</span></button></aside></div>}
 
       {joinOpen && <div className="overlay form-overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setJoinOpen(false); }}>
         <section className="join-modal" aria-modal="true" role="dialog" aria-labelledby="join-title">

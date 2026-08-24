@@ -27,6 +27,7 @@ export const listings = sqliteTable('listings', {
   contactEmail: text('contact_email').notNull(),
   category: text('category').notNull(),
   requestedBoostMinor: integer('requested_boost_minor').notNull().default(0),
+  placementType: text('placement_type').notNull().default('paid'),
   status: text('status').notNull().default('pending'),
   clickCount: integer('click_count').notNull().default(0),
   createdAt: text('created_at').notNull(),
@@ -97,3 +98,9 @@ export const requestLimits = sqliteTable('request_limits', {
   count: integer('count').notNull().default(1),
   expiresAt: text('expires_at').notNull(),
 });
+
+export const visitEvents = sqliteTable('visit_events', {
+  visitorHash: text('visitor_hash').primaryKey(),
+  firstSeenAt: text('first_seen_at').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
+}, (table) => [index('idx_visit_events_last_seen').on(table.lastSeenAt)]);

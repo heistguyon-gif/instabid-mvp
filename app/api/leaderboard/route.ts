@@ -1,4 +1,4 @@
-import { applyVerifiedTransaction, getLeaderboard, takePendingPaymentsForReconciliation, type RankingPeriod } from '@/db/runtime';
+import { applyVerifiedTransaction, getAudienceMetrics, getLeaderboard, takePendingPaymentsForReconciliation, type RankingPeriod } from '@/db/runtime';
 import { getBravopayTransaction } from '@/lib/bravopay';
 
 export async function GET(request: Request) {
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   }
   const listings = await getLeaderboard(market, period);
   const totalClicks = listings.reduce((sum, item) => sum + Number(item.clicks ?? 0), 0);
-  const dataMode = listings.every((item) => /^(br|world)-/.test(String(item.id))) ? 'demo' : 'pilot';
-  return Response.json({ market, period, listings, meta: { activeListings: listings.length, totalClicks, generatedAt: new Date().toISOString(), dataMode } },
-    { headers: { 'Cache-Control': 'public, max-age=15, stale-while-revalidate=30' } });
+  const audience = await getAudienceMetrics();
+  return Response.json({ market, period, listings, meta: { activeListings: listings.length, totalClicks, ...audience, generatedAt: new Date().toISOString(), dataMode: 'pilot' } },
+    { headers: { 'Cache-Control': 'no-store' } });
 }
