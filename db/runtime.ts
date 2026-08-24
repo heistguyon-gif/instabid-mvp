@@ -105,7 +105,7 @@ const schemaStatements = [
 ];
 
 const demoListings = [
-  ['partner-nexoflow', 'br', 'NexoFlow', '@nexoflow.app', 'Gestão e publicação profissional de conteúdo no Instagram.', 'https://instagram.com/nexoflow.app', '/nexoflow-avatar.ico', 'parceiros@instabid.br', 'Tools', '0', 'launch_partner'],
+  ['partner-nexoflow', 'br', 'resolv.', '@resolv.all', 'Soluções para negócios físicos e digitais: marketing, tecnologia e estrutura.', 'https://instagram.com/resolv.all', '/resolv-all-avatar.jpg', 'parceiros@instabid.br', 'Services', '0', 'launch_partner'],
   ['partner-instabid', 'br', 'Instabid', '@instabid.br', 'Perfil oficial da disputa brasileira por atenção.', 'https://instagram.com/instabid.br', '/logo-emblem.png', 'parceiros@instabid.br', 'Communities', '0', 'launch_partner'],
 ] as const;
 
@@ -132,7 +132,11 @@ export async function ensureDatabase() {
     db.prepare("INSERT OR IGNORE INTO markets (code, locale, currency, min_boost_minor, status) VALUES ('world', 'en', 'USD', 500, 'active')"),
     db.prepare("INSERT OR IGNORE INTO seasons (id, market_code, label, starts_at, ends_at, status) VALUES ('br-s34', 'br', 'Semana 34', '2026-08-17T03:00:00.000Z', '2026-08-24T02:59:59.000Z', 'active')"),
     db.prepare("INSERT OR IGNORE INTO seasons (id, market_code, label, starts_at, ends_at, status) VALUES ('world-s34', 'world', 'Week 34', '2026-08-17T00:00:00.000Z', '2026-08-24T00:00:00.000Z', 'active')"),
-    db.prepare("UPDATE listings SET image_url = '/nexoflow-avatar.ico' WHERE id = 'partner-nexoflow'"),
+    db.prepare(`UPDATE listings SET name = 'resolv.', handle = '@resolv.all',
+      description = 'Soluções para negócios físicos e digitais: marketing, tecnologia e estrutura.',
+      destination_url = 'https://instagram.com/resolv.all', image_url = '/resolv-all-avatar.jpg', category = 'Services'
+      WHERE id = 'partner-nexoflow' AND placement_type = 'launch_partner'
+        AND NOT EXISTS (SELECT 1 FROM boosts WHERE listing_id = 'partner-nexoflow' AND status = 'confirmed')`),
     db.prepare("UPDATE listings SET image_url = '/logo-emblem.png' WHERE id = 'partner-instabid'"),
   ]);
 
