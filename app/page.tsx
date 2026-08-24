@@ -36,7 +36,7 @@ const copy = {
     demo: 'Ambiente demonstrativo: projetos e números atuais são exemplos. Dados reais entram no piloto.',
     claim: 'Assuma o #1 por', spots: 'Novas posições começam em R$ 19.', explainer: 'Um valor menor ainda coloca você na melhor posição que ele alcançar.',
     input: 'URL do produto ou @perfil', choose: 'Escolha uma categoria', action: 'Entrar na disputa',
-    already: 'Já está na lista? Use o mesmo perfil e adicione apenas o boost que quiser.',
+    already: 'Já está na lista? A função de aumentar um boost existente será liberada durante o piloto.',
     periods: { week: 'Esta semana', today: 'Últimas 24h', all: 'Histórico' }, categories: { All: 'Todos', Creators: 'Criadores', Brands: 'Marcas', Tools: 'Ferramentas', Services: 'Serviços' },
     clicks: 'cliques válidos', details: 'ver detalhes', rulesTitle: 'Ranking verificável, não caixa-preta',
     rule1: 'Só pagamento confirmado altera posição.', rule2: 'Empate favorece quem chegou primeiro.', rule3: 'Cliques repetidos e robôs não entram na contagem.',
@@ -99,7 +99,7 @@ export default function Home() {
   const [quickInput, setQuickInput] = useState('');
   const [quickCategory, setQuickCategory] = useState('');
   const [formSeed, setFormSeed] = useState({ handle: '', url: '', category: '', boostMajor: 19, requestKey: '' });
-  const [bidMinor, setBidMinor] = useState(49000);
+  const [bidMinor, setBidMinor] = useState(1900);
   const text = copy[market];
   const boardKey = `${market}:${period}`;
   const board = remoteBoards[boardKey] ?? fallbackBoards[market];
