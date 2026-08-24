@@ -149,14 +149,15 @@ export async function getLeaderboard(market: 'br' | 'world', period: RankingPeri
   const result = await db.prepare(`SELECT
       l.id, l.name, l.handle, l.description, l.destination_url AS destinationUrl,
       l.category, l.click_count AS clicks, m.currency, s.id AS seasonId, s.label AS seasonLabel,
-      s.ends_at AS endsAt, l.created_at AS createdAt, COALESCE(SUM(b.amount_minor), 0) AS totalMinor
+      s.ends_at AS endsAt, l.created_at AS createdAt, MAX(b.created_at) AS totalReachedAt,
+      COALESCE(SUM(b.amount_minor), 0) AS totalMinor
     FROM listings l
     JOIN markets m ON m.code = l.market_code
     JOIN seasons s ON s.market_code = l.market_code AND s.status = 'active'
     ${boostJoin}
     WHERE l.market_code = ? AND l.status = 'active'
     GROUP BY l.id, s.id
-    ORDER BY totalMinor DESC, l.created_at ASC
+    ORDER BY totalMinor DESC, totalReachedAt ASC, l.created_at ASC
     LIMIT 50`).bind(market).all();
   return result.results;
 }
