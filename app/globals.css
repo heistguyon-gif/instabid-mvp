@@ -25,10 +25,10 @@ button { cursor: pointer; }
 .site-shell { min-height: 100vh; overflow: hidden; }
 
 .topbar { align-items: center; border-bottom: 1px solid rgba(23,24,91,.1); display: grid; grid-template-columns: 1fr auto 1fr; margin: 0 auto; max-width: 1180px; min-height: 86px; padding: 0 26px; }
-.brand-plate { align-items: center; display: flex; gap: 10px; width: fit-content; }
-.brand-emblem { background: var(--navy); border-radius: 11px; display: block; height: 42px; overflow: hidden; position: relative; width: 42px; }
-.brand-emblem img { height: 57px; left: -8px; max-width: none; position: absolute; top: -3px; width: 57px; }
-.brand-name { background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 27px; font-weight: 850; letter-spacing: -.055em; }
+.brand-plate { align-items: center; display: flex; width: fit-content; }
+.brand-wordmark { align-items: center; display: inline-flex; filter: drop-shadow(0 5px 10px rgba(23,24,91,.08)); line-height: 1; }
+.brand-insta { background: linear-gradient(110deg, #ffc20e, #ff6e35 47%, #ed378e); border-radius: 9px; color: var(--navy-2); font-size: 26px; font-weight: 900; letter-spacing: -.075em; padding: 5px 7px 6px; }
+.brand-bid { background: linear-gradient(110deg, #f34375 0%, #ed168e 48%, #7a12ef 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 26px; font-weight: 900; letter-spacing: -.075em; margin-left: 2px; }
 .desktop-nav { display: flex; gap: 28px; }
 .desktop-nav a { color: #5d5960; font-size: 13px; font-weight: 610; transition: color .2s ease; }
 .desktop-nav a:hover { color: var(--pink); }
@@ -63,11 +63,11 @@ button { cursor: pointer; }
 .quick-entry > button span { font-size: 18px; }
 .bid-hero > small { color: #847f85; display: block; font-size: 11px; margin-top: 15px; }
 
-.rules-strip { background: var(--navy); border-radius: 22px; color: white; display: grid; gap: 1px; grid-template-columns: repeat(3, 1fr); margin: 0 0 30px; overflow: hidden; }
-.rules-strip div { align-items: flex-start; background: rgba(255,255,255,.035); display: flex; gap: 10px; min-height: 80px; padding: 18px 16px; }
-.rules-strip div b { color: #ff8ac9; font-size: 10px; }
-.rules-strip div span { font-size: 11px; line-height: 1.45; }
-.rules-strip > a { background: rgba(255,255,255,.08); color: #ffd35d; font-size: 10px; font-weight: 800; grid-column: 1 / -1; padding: 11px 16px; text-align: center; text-transform: uppercase; }
+.rules-strip { background: #f7f3ef; border: 1px solid var(--line); border-radius: 18px; color: #5f5a61; display: grid; grid-template-columns: repeat(3, 1fr) auto; margin: -22px 0 32px; overflow: hidden; }
+.rules-strip div { align-items: center; border-right: 1px solid var(--line); display: flex; gap: 9px; min-height: 58px; padding: 12px 14px; }
+.rules-strip div b { color: var(--pink); font-size: 9px; }
+.rules-strip div span { font-size: 9px; line-height: 1.35; }
+.rules-strip > a { align-items: center; color: var(--navy); display: flex; font-size: 9px; font-weight: 800; padding: 12px 15px; text-align: center; text-transform: uppercase; }
 
 .ranking { padding: 12px 0 52px; }
 .category-tabs { display: flex; gap: 8px; margin-bottom: 18px; overflow-x: auto; padding: 3px 1px 8px; scrollbar-width: none; }
@@ -192,8 +192,9 @@ footer nav a:hover { color: var(--navy); }
   .quick-entry { grid-template-columns: 1fr; }
   .quick-entry > button { min-height: 52px; }
   .bid-hero { padding-bottom: 26px; }
-  .rules-strip { grid-template-columns: 1fr; }
-  .rules-strip > a { grid-column: auto; }
+  .rules-strip { background: transparent; border: 0; grid-template-columns: 1fr; margin: -28px 0 26px; }
+  .rules-strip div { display: none; }
+  .rules-strip > a { background: #f3eeee; border-radius: 99px; justify-content: center; padding: 10px 14px; width: 100%; }
   .category-tabs { margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px; }
   .ranking-card { gap: 10px; grid-template-columns: 32px 49px minmax(0, 1fr); }
   .podium { min-height: 150px; padding: 15px 13px; }
@@ -242,9 +243,8 @@ footer nav a:hover { color: var(--navy); }
 .participant-actions a:last-child { background: var(--gradient); color: white; }
 
 @media (max-width: 500px) {
-  .brand-name { font-size: 23px; }
-  .brand-emblem { height: 37px; width: 37px; }
-  .brand-emblem img { height: 50px; width: 50px; }
+  .brand-insta, .brand-bid { font-size: 23px; }
+  .brand-insta { border-radius: 8px; padding: 5px 6px; }
   .market-switch button { padding: 7px 9px; }
   .live-summary span:nth-of-type(2) { display: none; }
   .period-switch { margin-bottom: 28px; }

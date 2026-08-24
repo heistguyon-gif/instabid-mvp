@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
+import { BrandMark } from '@/components/BrandMark';
 
 type Market = 'br' | 'world';
 type RankingPeriod = 'week' | 'today' | 'all';
@@ -145,7 +146,7 @@ export default function Home() {
   return (
     <main className="site-shell" id="top">
       <header className="topbar">
-        <a className="brand-plate" href="#top" aria-label="Instabid home"><span className="brand-emblem"><Image src="/logo-emblem.png" alt="" width={57} height={57} /></span><span className="brand-name">Instabid</span></a>
+        <a className="brand-plate" href="#top" aria-label="Instabid home"><BrandMark /></a>
         <nav className="desktop-nav" aria-label="Navegação principal"><a href="#ranking">{text.nav[0]}</a><a href="/rules">{text.nav[1]}</a><a href="#como-funciona">{text.nav[2]}</a></nav>
         <div className="market-switch" aria-label="Escolha o mercado"><button className={market === 'br' ? 'active' : ''} onClick={() => chooseMarket('br')} type="button">BR</button><button className={market === 'world' ? 'active' : ''} onClick={() => chooseMarket('world')} type="button">WORLD</button></div>
       </header>
@@ -162,8 +163,6 @@ export default function Home() {
           <small>{text.already}</small>
         </section>
 
-        <section className="rules-strip" aria-label={text.rulesTitle}><div><b>01</b><span>{text.rule1}</span></div><div><b>02</b><span>{text.rule2}</span></div><div><b>03</b><span>{text.rule3}</span></div><a href="/rules">{text.rulesTitle} →</a></section>
-
         <section className="ranking" id="ranking">
           <div className="category-tabs" id="categorias">{categoryCodes.map((code, index) => <button className={category === code ? 'active' : ''} key={code} onClick={() => setCategory(code)} type="button"><i>{['▦', '◉', '◆', '⌁', '✦'][index]}</i>{text.categories[code]}</button>)}</div>
           <div className="ranking-list">
@@ -171,6 +170,8 @@ export default function Home() {
             {visibleBoard.map((item, index) => <article className={`ranking-card ${index < 3 ? `podium podium-${index + 1}` : 'compact'}`} key={item.id} onClick={() => setSelected(item)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(item); }}><div className="rank-chip">#{item.rank}</div><div className={`avatar ${item.tone}`}>{item.name.slice(0, 1)}</div><div className="project-copy"><strong>{item.name}</strong><p>{item.description}</p><div className="meta-line"><span>{item.handle}</span><span>◇ {localizedCategory(item.category, market)}</span><b><i /> {item.clicks} {text.clicks}</b></div></div><div className="bid-value">{item.bid}</div><button className="detail-trigger" onClick={(event) => { event.stopPropagation(); setSelected(item); }} type="button">{text.details} →</button><button className="rank-challenge" onClick={(event) => { event.stopPropagation(); openJoin(item.totalMinor + incrementMinor); }} type="button">{market === 'br' ? 'Superar por' : 'Beat for'} {currency(item.totalMinor + incrementMinor, item.currency, market)}</button></article>)}
           </div>
         </section>
+
+        <section className="rules-strip" aria-label={text.rulesTitle}><div><b>01</b><span>{text.rule1}</span></div><div><b>02</b><span>{text.rule2}</span></div><div><b>03</b><span>{text.rule3}</span></div><a href="/rules">{text.rulesTitle} →</a></section>
 
         <section className="final-cta"><span className="cta-emblem"><Image src="/logo-emblem.png" alt="" width={92} height={92} /></span><div><small>{text.sponsored}</small><h2>{market === 'br' ? 'Seu projeto pode liderar a próxima temporada.' : 'Your project could lead the next season.'}</h2></div><button onClick={() => openJoin()} type="button">{text.action} ↗</button></section>
       </div>
