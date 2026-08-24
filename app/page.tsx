@@ -18,6 +18,7 @@ type PaymentView = {
   id: string; status: string; amountMinor: number; currency: string;
   pixCopyPaste: string | null; expiresAt: string | null;
 };
+type CheckoutPreview = { name: string; handle: string; amountMinor: number };
 
 const fallbackBoards: Record<Market, BoardItem[]> = {
   br: [
@@ -47,7 +48,7 @@ const copy = {
     clicks: 'cliques válidos', details: 'ver detalhes', rulesTitle: 'Ranking verificável, não caixa-preta',
     rule1: 'Só pagamento confirmado altera posição.', rule2: 'Empate favorece quem chegou primeiro.', rule3: 'Cliques repetidos e robôs não entram na contagem.',
     sponsored: 'posição patrocinada', visit: 'Visitar projeto', challenge: 'Superar esta posição', page: 'Abrir página pública', close: 'Fechar',
-    modalTitle: 'Coloque seu projeto na disputa.', modalBody: 'Preencha os dados, gere o Pix e acompanhe a confirmação nesta tela. Só o pagamento confirmado altera o ranking.',
+    modalTitle: 'Entre no ranking em 2 passos.', modalBody: 'Primeiro escolha como seu perfil aparece. Depois informe apenas os dados necessários para gerar o Pix.',
     name: 'Nome do projeto', handle: 'Perfil do Instagram', description: 'Descrição curta', url: 'Link de destino', email: 'E-mail de contato', category: 'Categoria', intended: 'Boost pretendido (R$)',
     submit: 'Gerar Pix', sending: 'Gerando Pix…', successTitle: 'Pagamento confirmado.', successBody: 'Seu boost entrou no ranking. A nova posição já está sendo atualizada.',
     previewTitle: 'Este é o preview da Vercel.', previewBody: 'A inscrição não foi salva aqui. Use a versão funcional do Sites enquanto conectamos um banco compartilhado.',
@@ -98,6 +99,9 @@ export default function Home() {
   const [payment, setPayment] = useState<PaymentView | null>(null);
   const [qrImage, setQrImage] = useState('');
   const [copied, setCopied] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
+  const [checkoutPreview, setCheckoutPreview] = useState<CheckoutPreview | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [quickInput, setQuickInput] = useState('');
   const [quickCategory, setQuickCategory] = useState('');
@@ -161,7 +165,7 @@ export default function Home() {
 
   function chooseMarket(next: Market) {
     const nextIncrement = next === 'br' ? 1000 : 100;
-    setMarket(next); setBidMinor(fallbackBoards[next][0].totalMinor + nextIncrement); setSelected(null); setSubmission('idle'); setPayment(null); setCategory('All'); setQuickCategory('');
+    setMarket(next); setBidMinor(fallbackBoards[next][0].totalMinor + nextIncrement); setSelected(null); setSubmission('idle'); setPayment(null); setCheckoutStep(1); setCategory('All'); setQuickCategory('');
   }
 
   function openJoin(targetMinor = bidMinor) {
@@ -170,7 +174,20 @@ export default function Home() {
     const handle = isHandle ? value : '';
     const url = isHandle ? `https://instagram.com/${value.slice(1)}` : value.startsWith('https://') ? value : '';
     setFormSeed({ handle, url, category: quickCategory, boostMajor: targetMinor / 100, requestKey: crypto.randomUUID() });
-    setPayment(null); setQrImage(''); setCopied(false); setSubmission('idle'); setJoinOpen(true);
+    setPayment(null); setQrImage(''); setCopied(false); setCheckoutStep(1); setCheckoutPreview(null); setErrorMessage(''); setSubmission('idle'); setJoinOpen(true);
+  }
+
+  function continueToPayment(form: HTMLFormElement) {
+    const fields = [...form.querySelectorAll('[data-checkout-step="project"] input, [data-checkout-step="project"] select')];
+    for (const field of fields) {
+      if ((field instanceof HTMLInputElement || field instanceof HTMLSelectElement) && !field.reportValidity()) return;
+    }
+    const data = new FormData(form);
+    const amountMinor = Math.round(Number(data.get('requestedBoostMajor')) * 100);
+    setCheckoutPreview({ name: String(data.get('name') ?? ''), handle: String(data.get('handle') ?? ''), amountMinor });
+    setErrorMessage('');
+    setCheckoutStep(2);
+    window.setTimeout(() => form.querySelector<HTMLInputElement>('[name="buyerName"]')?.focus(), 0);
   }
 
   async function submitListing(event: FormEvent<HTMLFormElement>) {
@@ -178,6 +195,11 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     const requestedBoostMinor = Math.round(Number(form.get('requestedBoostMajor')) * 100);
     const fields = Object.fromEntries(form.entries());
+    const rawHandle = String(form.get('handle') ?? '').trim();
+    const normalizedHandle = rawHandle.replace(/^https?:\/\/(?:www\.)?instagram\.com\//i, '').split(/[/?#]/)[0].replace(/^@/, '');
+    const destinationUrl = `https://instagram.com/${normalizedHandle}`;
+    const projectName = String(form.get('name') ?? '').trim();
+    const description = `Conheça ${projectName} (@${normalizedHandle}) no Instagram.`;
     const endpoint = market === 'br' ? '/api/checkout/pix' : '/api/listings';
     const urlParams = new URLSearchParams(window.location.search);
     const tracking = Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'ttclid', 'gclid', 'src', 'sck']
@@ -186,21 +208,35 @@ export default function Home() {
       ? {
           ...fields,
           market,
+          handle: `@${normalizedHandle}`,
+          destinationUrl,
+          description,
           requestedBoostMinor,
           idempotencyKey: formSeed.requestKey,
-          buyer: { name: form.get('buyerName'), email: form.get('contactEmail'), document: form.get('document'), phone: form.get('phone') },
+          contactEmail: form.get('contactEmail'),
+          buyer: { name: form.get('buyerName'), email: form.get('contactEmail'), document: form.get('document') },
           tracking,
         }
       : { market, ...fields, requestedBoostMinor };
     const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
-    if (!response?.ok) return setSubmission('error');
-    const payload = await response.json() as { listing?: { status?: string }; payment?: PaymentView };
-    if (market === 'br' && payload.payment) {
+    const payload = await response?.json().catch(() => ({})) as { error?: string; listing?: { status?: string }; payment?: PaymentView } | undefined;
+    if (!response?.ok) {
+      const messages: Record<string, string> = {
+        invalid_fields: 'Revise o @perfil, o CPF e o e-mail informado.',
+        duplicate_handle: 'Esse perfil já está no ranking. Em breve você poderá adicionar um novo boost pelo próprio card.',
+        rate_limited: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente novamente.',
+        payment_provider_unavailable: 'A BravoPay não conseguiu gerar o Pix agora. Tente novamente em instantes.',
+      };
+      setErrorMessage(messages[payload?.error ?? ''] ?? 'Não foi possível gerar o Pix agora. Tente novamente.');
+      setSubmission('error');
+      return;
+    }
+    if (market === 'br' && payload?.payment) {
       setPayment(payload.payment);
       setSubmission(payload.payment.status === 'confirmed' ? 'paid' : 'payment');
       return;
     }
-    setSubmission(payload.listing?.status === 'preview_only' ? 'preview' : 'success');
+    setSubmission(payload?.listing?.status === 'preview_only' ? 'preview' : 'success');
   }
 
   async function copyPix() {
@@ -273,18 +309,45 @@ export default function Home() {
             <p className="modal-kicker">{market === 'br' ? 'BR · PIX · BRAVOPAY' : 'WORLD · USD'} · {text.sponsored}</p>
             <h3 id="join-title">{text.modalTitle}</h3>
             <p className="modal-intro">{text.modalBody}</p>
-            <form key={`${formSeed.handle}:${formSeed.url}:${formSeed.category}:${formSeed.boostMajor}:${formSeed.requestKey}`} onSubmit={submitListing}>
-              <label>{text.name}<input name="name" required minLength={2} maxLength={60} /></label>
-              <label>{text.handle}<input defaultValue={formSeed.handle} name="handle" required placeholder="@seuperfil" pattern="@?[A-Za-z0-9._]{1,30}" /></label>
-              <label className="full">{text.description}<textarea name="description" required minLength={12} maxLength={220} rows={3} /></label>
-              <label>{text.url}<input defaultValue={formSeed.url} name="destinationUrl" required type="url" placeholder="https://" /></label>
-              <label>{text.email}<input name="contactEmail" required type="email" /></label>
-              {market === 'br' && <><label>Nome completo do pagador<input autoComplete="name" name="buyerName" required minLength={5} /></label><label>CPF ou CNPJ<input autoComplete="off" inputMode="numeric" name="document" required /></label><label>Celular com DDD<input autoComplete="tel" inputMode="tel" name="phone" required /></label></>}
-              <label>{text.intended}<input defaultValue={formSeed.boostMajor} min={minBoostMinor / 100} max={999999} name="requestedBoostMajor" required step="1" type="number" /></label>
-              <label>{text.category}<select defaultValue={formSeed.category} name="category" required><option value="" disabled>—</option><option value="Creators">{localizedCategory('Creators', market)}</option><option value="Products">{localizedCategory('Products', market)}</option><option value="Tools">{localizedCategory('Tools', market)}</option><option value="Brands">{localizedCategory('Brands', market)}</option><option value="Services">{localizedCategory('Services', market)}</option><option value="Communities">{localizedCategory('Communities', market)}</option></select></label>
-              {submission === 'error' && <p className="form-error">{market === 'br' ? 'Não foi possível gerar o Pix. Confira os dados, CPF/CNPJ, celular e tente novamente.' : text.error}</p>}
-              <p className="form-disclosure full">{market === 'br' ? 'Ao gerar o Pix, o valor exibido será cobrado pela BravoPay. A posição só muda após a confirmação; ser ultrapassado não gera reembolso automático.' : 'Submitting does not charge you. Rank changes only after approval and confirmed payment.'}</p>
-              <button className="submit-button full" disabled={submission === 'sending'} type="submit">{submission === 'sending' ? text.sending : text.submit}<span>↗</span></button>
+            <form className="checkout-form" key={`${formSeed.handle}:${formSeed.url}:${formSeed.category}:${formSeed.boostMajor}:${formSeed.requestKey}`} onSubmit={submitListing}>
+              {market === 'br' ? <>
+                <div className="checkout-progress full" aria-label={`Etapa ${checkoutStep} de 2`}><span className={checkoutStep === 1 ? 'active' : 'done'}><b>1</b> Perfil e lance</span><i /><span className={checkoutStep === 2 ? 'active' : ''}><b>2</b> Gerar Pix</span></div>
+
+                <div className={`checkout-step full ${checkoutStep === 1 ? 'active' : ''}`} data-checkout-step="project">
+                  <label className="full">Perfil do Instagram<input defaultValue={formSeed.handle || formSeed.url} name="handle" required placeholder="@seuperfil" maxLength={80} autoCapitalize="none" autoCorrect="off" /></label>
+                  <div className="checkout-row">
+                    <label>Nome no ranking<input name="name" required minLength={2} maxLength={60} placeholder="Sua marca ou projeto" /></label>
+                    <label>{text.category}<select defaultValue={formSeed.category} name="category" required><option value="" disabled>Selecione</option><option value="Creators">Criadores</option><option value="Products">Produtos</option><option value="Tools">Ferramentas</option><option value="Brands">Marcas</option><option value="Services">Serviços</option><option value="Communities">Comunidades</option></select></label>
+                  </div>
+                  <label className="boost-field">Seu lance <span>mínimo R$ 19</span><div><b>R$</b><input defaultValue={formSeed.boostMajor} min={minBoostMinor / 100} max={999999} name="requestedBoostMajor" required step="1" type="number" inputMode="numeric" /></div></label>
+                  <p className="checkout-hint">Você entra imediatamente na melhor posição que esse valor alcançar.</p>
+                  <button className="submit-button" onClick={(event) => { if (event.currentTarget.form) continueToPayment(event.currentTarget.form); }} type="button">Continuar para o Pix <span>→</span></button>
+                </div>
+
+                <div className={`checkout-step full ${checkoutStep === 2 ? 'active' : ''}`} data-checkout-step="payment">
+                  <div className="checkout-summary"><div><small>Você está impulsionando</small><strong>{checkoutPreview?.name || 'Seu perfil'} <span>{checkoutPreview?.handle}</span></strong></div><b>{currency(checkoutPreview?.amountMinor || 1900, 'BRL', 'br')}</b></div>
+                  <p className="payment-data-title">Dados para gerar o Pix <span>Pagamento seguro pela BravoPay</span></p>
+                  <label className="full">Nome completo<input autoComplete="name" name="buyerName" required minLength={5} placeholder="Como aparece no CPF" /></label>
+                  <div className="checkout-row">
+                    <label>CPF ou CNPJ<input autoComplete="off" inputMode="numeric" name="document" required placeholder="Somente números" /></label>
+                    <label>E-mail para confirmação<input autoComplete="email" name="contactEmail" required type="email" placeholder="voce@email.com" /></label>
+                  </div>
+                  {submission === 'error' && <p className="form-error">{errorMessage}</p>}
+                  <p className="form-disclosure">Seu perfil só sobe após o pagamento ser confirmado. Se outra pessoa superar seu lance depois, não há reembolso automático.</p>
+                  <div className="checkout-actions"><button className="checkout-back" onClick={() => { setSubmission('idle'); setErrorMessage(''); setCheckoutStep(1); }} type="button">← Voltar</button><button className="submit-button" disabled={submission === 'sending'} type="submit">{submission === 'sending' ? text.sending : `Gerar Pix de ${currency(checkoutPreview?.amountMinor || 1900, 'BRL', 'br')}`}<span>↗</span></button></div>
+                </div>
+              </> : <>
+                <label>{text.name}<input name="name" required minLength={2} maxLength={60} /></label>
+                <label>{text.handle}<input defaultValue={formSeed.handle} name="handle" required placeholder="@yourprofile" pattern="@?[A-Za-z0-9._]{1,30}" /></label>
+                <label className="full">{text.description}<textarea name="description" required minLength={12} maxLength={220} rows={3} /></label>
+                <label>{text.url}<input defaultValue={formSeed.url} name="destinationUrl" required type="url" placeholder="https://" /></label>
+                <label>{text.email}<input name="contactEmail" required type="email" /></label>
+                <label>{text.intended}<input defaultValue={formSeed.boostMajor} min={minBoostMinor / 100} max={999999} name="requestedBoostMajor" required step="1" type="number" /></label>
+                <label>{text.category}<select defaultValue={formSeed.category} name="category" required><option value="" disabled>—</option><option value="Creators">{localizedCategory('Creators', market)}</option><option value="Products">{localizedCategory('Products', market)}</option><option value="Tools">{localizedCategory('Tools', market)}</option><option value="Brands">{localizedCategory('Brands', market)}</option><option value="Services">{localizedCategory('Services', market)}</option><option value="Communities">{localizedCategory('Communities', market)}</option></select></label>
+                {submission === 'error' && <p className="form-error">{errorMessage || text.error}</p>}
+                <p className="form-disclosure full">Submitting does not charge you. Rank changes only after approval and confirmed payment.</p>
+                <button className="submit-button full" disabled={submission === 'sending'} type="submit">{submission === 'sending' ? text.sending : text.submit}<span>↗</span></button>
+              </>}
             </form>
           </>}
         </section>

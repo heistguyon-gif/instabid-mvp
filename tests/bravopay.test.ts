@@ -15,15 +15,20 @@ test('valida e normaliza os dados enviados ao Pix', () => {
     document: '52998224725',
     phone: '11987654321',
   });
+  assert.deepEqual(normalizeBuyer({
+    name: 'Cliente Teste', email: 'cliente@exemplo.com', document: '52998224725', phone: '',
+  }), {
+    name: 'Cliente Teste', email: 'cliente@exemplo.com', document: '52998224725', phone: '',
+  });
   assert.equal(normalizeBuyer({ name: 'Teste', email: 'x', document: '11111111111', phone: '1' }), null);
 });
 
 test('normaliza uma transação paga da BravoPay', () => {
   assert.deepEqual(normalizeTransaction({
-    id: 'tx_abc123', status: 'PAID', amount_cents: 49000, currency: 'BRL', method: 'PIX',
+    id: '53b46513-25af-4220-a389-769d6e378899', status: 'PAID', amount_cents: 49000, currency: 'BRL', method: 'PIX',
     external_reference: 'pay_123', pix: { copy_paste: '000201PIX', expires_at: '2026-08-24T00:00:00Z' },
   }), {
-    id: 'tx_abc123', status: 'paid', amountMinor: 49000, currency: 'BRL', method: 'PIX',
+    id: '53b46513-25af-4220-a389-769d6e378899', status: 'paid', amountMinor: 49000, currency: 'BRL', method: 'PIX',
     externalReference: 'pay_123', copyPasteCode: '000201PIX', expiresAt: '2026-08-24T00:00:00Z',
   });
 });

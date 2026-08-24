@@ -4,7 +4,7 @@ export type BuyerInput = {
   name: string;
   email: string;
   document: string;
-  phone: string;
+  phone?: string;
 };
 
 export type BravopayTransaction = {
@@ -20,12 +20,18 @@ export type BravopayTransaction = {
 
 export class BravopayError extends Error {
   readonly status: number;
+  readonly providerCode: string;
 
-  constructor(message: string, status = 502) {
+  constructor(message: string, status = 502, providerCode = '') {
     super(message);
     this.name = 'BravopayError';
     this.status = status;
+    this.providerCode = providerCode;
   }
+}
+
+function isSafeProviderId(value: string) {
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
 }
 
 export function digitsOnly(value: unknown) {
@@ -73,7 +79,7 @@ export function normalizeBuyer(value: unknown): BuyerInput | null {
   if (buyer.name.length < 5 || buyer.name.split(/\s+/).length < 2) return null;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(buyer.email)) return null;
   if (!isValidCpf(buyer.document) && !isValidCnpj(buyer.document)) return null;
-  if (!/^\d{10,11}$/.test(buyer.phone)) return null;
+  if (buyer.phone && !/^\d{10,11}$/.test(buyer.phone)) return null;
   return buyer;
 }
 
@@ -99,7 +105,7 @@ export function normalizeTransaction(value: unknown): BravopayTransaction {
     ? source.pix as Record<string, unknown>
     : {};
   const id = String(source.id ?? '');
-  if (!/^tx_[A-Za-z0-9_-]+$/.test(id)) throw new BravopayError('Resposta inválida do processador de pagamentos.');
+  if (!isSafeProviderId(id)) throw new BravopayError('Resposta inválida do processador de pagamentos.', 502, 'invalid_transaction_id');
   return {
     id,
     status: normalizeStatus(source.status),
@@ -124,11 +130,15 @@ function providerConfig() {
 async function providerJson(response: Response) {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const providerCode = body && typeof body === 'object' && !Array.isArray(body)
-      ? String((body as { error?: { code?: unknown } }).error?.code ?? '')
+    const providerError = body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as { error?: { code?: unknown; message?: unknown } }).error
+      : undefined;
+    const providerCode = providerError
+      ? String(providerError.code ?? '')
       : '';
     const status = providerCode === 'rate_limited' ? 503 : 502;
-    throw new BravopayError('Não foi possível gerar ou consultar o Pix. Tente novamente.', status);
+    const providerMessage = String(providerError?.message ?? '').replace(/[\r\n]/g, ' ').slice(0, 180);
+    throw new BravopayError(providerMessage || 'Não foi possível gerar ou consultar o Pix. Tente novamente.', status, providerCode);
   }
   return body;
 }
@@ -142,7 +152,9 @@ export async function createBravopayPix(input: {
   tracking?: Record<string, string>;
 }) {
   const { apiKey, baseUrl } = providerConfig();
-  const phone = input.buyer.phone.startsWith('55') ? input.buyer.phone : `55${input.buyer.phone}`;
+  const phone = input.buyer.phone
+    ? (input.buyer.phone.startsWith('55') ? input.buyer.phone : `55${input.buyer.phone}`)
+    : '';
   const utmSource = input.tracking ?? {};
   const utm = Object.fromEntries(['source', 'medium', 'campaign', 'content', 'term', 'fbclid', 'ttclid', 'gclid', 'src', 'sck']
     .map((key) => [key, String(utmSource[key] ?? '').trim().slice(0, 300)] as const)
@@ -164,7 +176,7 @@ export async function createBravopayPix(input: {
         name: input.buyer.name,
         email: input.buyer.email,
         cpf: input.buyer.document,
-        phone,
+        ...(phone ? { phone } : {}),
       },
       expires_in: 1800,
       ...(Object.keys(utm).length ? { utm } : {}),
@@ -178,7 +190,7 @@ export async function createBravopayPix(input: {
 
 export async function getBravopayTransaction(id: string) {
   const { apiKey, baseUrl } = providerConfig();
-  if (!/^tx_[A-Za-z0-9_-]+$/.test(id)) throw new BravopayError('Pagamento inválido.', 400);
+  if (!isSafeProviderId(id)) throw new BravopayError('Pagamento inválido.', 400, 'invalid_transaction_id');
   const response = await fetch(`${baseUrl}/transactions/${encodeURIComponent(id)}`, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(12_000),

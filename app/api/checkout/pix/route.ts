@@ -43,10 +43,13 @@ export async function POST(request: Request) {
   const buyer = normalizeBuyer(body.buyer);
   const name = String(body.name ?? '').trim().slice(0, 60);
   const handle = normalizeInstagramHandle(body.handle);
-  const description = String(body.description ?? '').trim().slice(0, 220);
-  const contactEmail = String(body.contactEmail ?? '').trim().toLowerCase().slice(0, 160);
+  const suppliedDescription = String(body.description ?? '').trim().slice(0, 220);
+  const description = suppliedDescription.length >= 12
+    ? suppliedDescription
+    : `Conheça ${name || 'este projeto'} (${handle || '@instagram'}) no Instagram.`.slice(0, 220);
+  const contactEmail = String(body.contactEmail ?? buyer?.email ?? '').trim().toLowerCase().slice(0, 160);
   const category = String(body.category ?? '').trim().slice(0, 40);
-  const destinationUrl = normalizeDestination(body.destinationUrl);
+  const destinationUrl = normalizeDestination(body.destinationUrl || (handle ? `https://instagram.com/${handle.slice(1)}` : ''));
   const requestedBoostMinor = Math.round(Number(body.requestedBoostMinor));
   if (!buyer || name.length < 2 || !handle || description.length < 12 || !destinationUrl ||
       contactEmail !== buyer.email || !isAllowedCategory(category) || !Number.isSafeInteger(requestedBoostMinor) ||
@@ -86,7 +89,10 @@ export async function POST(request: Request) {
     return json({ payment: saved });
   } catch (error) {
     await markPaymentFailed(paymentId).catch(() => undefined);
-    if (error instanceof BravopayError) return json({ error: 'payment_provider_unavailable' }, error.status);
+    if (error instanceof BravopayError) {
+      console.error('bravopay_checkout_error', { status: error.status, providerCode: error.providerCode, message: error.message });
+      return json({ error: 'payment_provider_unavailable' }, error.status);
+    }
     const message = error instanceof Error ? error.message : '';
     if (message.includes('duplicate_handle')) return json({ error: 'duplicate_handle' }, 409);
     if (message.includes('persistent_database_unavailable')) return json({ error: 'preview_only' }, 503);
