@@ -13,6 +13,7 @@ export default function WorldPage() {
         <p>We are validating the mechanics, payments and real traffic in Brazil first. The World leaderboard is separate and is not accepting bids yet.</p>
         <a href="/br">Explore Instabid Brasil <span>→</span></a>
         <small>@instabidworld</small>
+        <nav className="world-legal" aria-label="Legal"><a href="/rules">Rules</a><a href="/privacy">Privacy</a><a href="/about">About</a></nav>
       </section>
     </main>
   );

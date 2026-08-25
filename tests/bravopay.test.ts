@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createBravopayPix, normalizeBuyer, normalizeTransaction, verifyBravopayWebhook } from '../lib/bravopay.ts';
-import { isAllowedListingContent, normalizeDestination } from '../lib/validation.ts';
+import { isAllowedCategory, isAllowedListingContent, normalizeDestination, normalizeInstagramHandle } from '../lib/validation.ts';
 
 test('valida e normaliza os dados enviados ao Pix', () => {
   assert.deepEqual(normalizeBuyer({
@@ -86,4 +86,19 @@ test('bloqueia destinos e conteúdo incompatíveis antes da cobrança', () => {
   assert.equal(normalizeDestination('https://onlyfans.com/exemplo'), null);
   assert.equal(isAllowedListingContent('Cassino premium', 'Projeto de apostas'), false);
   assert.equal(isAllowedListingContent('Ferramenta para creators', 'Automação profissional'), true);
+});
+
+test('normaliza perfis do Instagram e rejeita formatos impossíveis', () => {
+  assert.equal(normalizeInstagramHandle('@Instabid.BR'), '@instabid.br');
+  assert.equal(normalizeInstagramHandle('https://instagram.com/resolv.all/'), '@resolv.all');
+  assert.equal(normalizeInstagramHandle('@perfil..quebrado'), null);
+  assert.equal(normalizeInstagramHandle('@.perfil'), null);
+  assert.equal(normalizeInstagramHandle('@perfil.'), null);
+});
+
+test('mantém as seis categorias aceitas no checkout e no ranking', () => {
+  for (const category of ['Creators', 'Brands', 'Tools', 'Products', 'Services', 'Communities']) {
+    assert.equal(isAllowedCategory(category), true);
+  }
+  assert.equal(isAllowedCategory('Adult'), false);
 });

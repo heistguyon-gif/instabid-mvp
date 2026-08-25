@@ -1,13 +1,13 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import QRCode from 'qrcode';
 import { BrandMark } from '@/components/BrandMark';
 
 type Market = 'br' | 'world';
 type RankingPeriod = 'week' | 'today' | 'all';
-type CategoryCode = 'All' | 'Creators' | 'Brands' | 'Tools' | 'Services';
+type CategoryCode = 'All' | 'Creators' | 'Brands' | 'Tools' | 'Products' | 'Services' | 'Communities';
 type BoardItem = {
   id: string; rank: number; name: string; handle: string; description: string;
   destinationUrl: string; category: string; bid: string; clicks: string;
@@ -37,10 +37,10 @@ const copy = {
     claim: 'Assuma o #1 por', spots: 'Novas posições começam em R$ 5.', explainer: 'O preço cresce com a disputa: você entra na melhor posição que o lance alcançar.',
     input: 'URL do produto ou @perfil', choose: 'Escolha uma categoria', action: 'Entrar na disputa',
     already: 'Já está na lista? Use o mesmo @ e pague somente a diferença para subir.',
-    periods: { week: 'Esta semana', today: 'Últimas 24h', all: 'Histórico' }, categories: { All: 'Todos', Creators: 'Criadores', Brands: 'Marcas', Tools: 'Ferramentas', Services: 'Serviços' },
+    periods: { week: 'Esta semana', today: 'Últimas 24h', all: 'Histórico' }, categories: { All: 'Todos', Creators: 'Criadores', Brands: 'Marcas', Tools: 'Ferramentas', Products: 'Produtos', Services: 'Serviços', Communities: 'Comunidades' },
     clicks: 'cliques válidos', details: 'ver detalhes', rulesTitle: 'Ranking verificável, não caixa-preta',
     rule1: 'Só pagamento confirmado altera posição.', rule2: 'Empate favorece quem chegou primeiro.', rule3: 'Cliques repetidos e robôs não entram na contagem.',
-    sponsored: 'posição patrocinada', visit: 'Visitar projeto', challenge: 'Superar esta posição', page: 'Abrir página pública', close: 'Fechar',
+    sponsored: 'posição patrocinada', visit: 'Visitar perfil', challenge: 'Superar esta posição', page: 'Abrir página pública', close: 'Fechar',
     modalTitle: 'Entre no ranking em 2 passos.', modalBody: 'Primeiro escolha como seu perfil aparece. Depois informe apenas os dados necessários para gerar o Pix.',
     name: 'Nome do projeto', handle: 'Perfil do Instagram', description: 'Descrição curta', url: 'Link de destino', email: 'E-mail de contato', category: 'Categoria', intended: 'Boost pretendido (R$)',
     submit: 'Gerar Pix', sending: 'Gerando Pix…', successTitle: 'Pagamento confirmado.', successBody: 'Seu boost entrou no ranking. A nova posição já está sendo atualizada.',
@@ -54,7 +54,7 @@ const copy = {
     claim: 'Claim #1 for', spots: 'New spots start at $5.', explainer: 'A smaller amount still lands at the best position it can reach.',
     input: 'Your product URL or @handle', choose: 'Choose a category', action: 'Enter the race',
     already: 'Already listed? Use the same profile; after verification, you pay only the increment.',
-    periods: { week: 'This week', today: 'Last 24h', all: 'All-time' }, categories: { All: 'All', Creators: 'Creators', Brands: 'Brands', Tools: 'Tools', Services: 'Services' },
+    periods: { week: 'This week', today: 'Last 24h', all: 'All-time' }, categories: { All: 'All', Creators: 'Creators', Brands: 'Brands', Tools: 'Tools', Products: 'Products', Services: 'Services', Communities: 'Communities' },
     clicks: 'valid clicks', details: 'see details', rulesTitle: 'A verifiable board, not a black box',
     rule1: 'Only confirmed payments change rank.', rule2: 'Ties favor whoever got there first.', rule3: 'Repeat clicks and bots are not counted.',
     sponsored: 'sponsored position', visit: 'Visit project', challenge: 'Beat this position', page: 'Open public page', close: 'Close',
@@ -68,7 +68,9 @@ const copy = {
 };
 
 const tones = ['sunset', 'violet', 'pink', 'blue', 'orange'];
-const categoryCodes: CategoryCode[] = ['All', 'Creators', 'Brands', 'Tools', 'Services'];
+const categoryCodes: CategoryCode[] = ['All', 'Creators', 'Brands', 'Tools', 'Products', 'Services', 'Communities'];
+const categoryIcons = ['▦', '◉', '◆', '⌁', '◫', '✦', '◎'];
+const listingCategories = categoryCodes.filter((code): code is Exclude<CategoryCode, 'All'> => code !== 'All');
 const categoryAliases: Record<string, string> = { Criadores: 'Creators', Marcas: 'Brands', Ferramentas: 'Tools', Serviços: 'Services', Comunidades: 'Communities', Produtos: 'Products' };
 
 function currency(amountMinor: number, code: string, market: Market) {
@@ -98,16 +100,21 @@ export default function Home() {
   const [submission, setSubmission] = useState<'idle' | 'sending' | 'payment' | 'paid' | 'success' | 'preview' | 'error'>('idle');
   const [payment, setPayment] = useState<PaymentView | null>(null);
   const [qrImage, setQrImage] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [shareFeedback, setShareFeedback] = useState('');
+  const [paymentSync, setPaymentSync] = useState<'idle' | 'checking' | 'retrying'>('idle');
   const [avatarPreview, setAvatarPreview] = useState('');
   const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
   const [checkoutPreview, setCheckoutPreview] = useState<CheckoutPreview | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [boardStatus, setBoardStatus] = useState<Record<string, 'loading' | 'live' | 'stale'>>({});
   const [quickInput, setQuickInput] = useState('');
   const [quickCategory, setQuickCategory] = useState('');
   const [formSeed, setFormSeed] = useState({ name: '', handle: '', url: '', category: '', boostMajor: 5, requestKey: '' });
   const [bidMinor, setBidMinor] = useState(500);
+  const joinDialogRef = useRef<HTMLElement>(null);
+  const detailPanelRef = useRef<HTMLElement>(null);
   const text = copy[market];
   const boardKey = `${market}:${period}`;
   const board = remoteBoards[boardKey] ?? fallbackBoards[market];
@@ -130,8 +137,13 @@ export default function Home() {
         }));
         setRemoteBoards((current) => ({ ...current, [boardKey]: items }));
         setBoardMeta((current) => ({ ...current, [boardKey]: payload.meta }));
+        setBoardStatus((current) => ({ ...current, [boardKey]: 'live' }));
         if (items.length) setBidMinor(Math.max(500, items[0].totalMinor + 100));
-      }).catch(() => undefined);
+      }).catch((error) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          setBoardStatus((current) => ({ ...current, [boardKey]: 'stale' }));
+        }
+      });
     void loadLeaderboard();
     const timer = window.setInterval(loadLeaderboard, 10_000);
     return () => { controller.abort(); window.clearInterval(timer); };
@@ -157,10 +169,18 @@ export default function Home() {
     if (submission !== 'payment' || !paymentId || paymentStatus !== 'pending') return;
     let active = true;
     const check = async () => {
+      setPaymentSync('checking');
       const response = await fetch(`/api/payments/${encodeURIComponent(paymentId)}`, { cache: 'no-store' }).catch(() => null);
-      if (!response?.ok || !active) return;
+      if (!response?.ok || !active) {
+        if (active) setPaymentSync('retrying');
+        return;
+      }
       const payload = await response.json() as { payment?: PaymentView };
-      if (!payload.payment) return;
+      if (!payload.payment) {
+        setPaymentSync('retrying');
+        return;
+      }
+      setPaymentSync('idle');
       setPayment(payload.payment);
       if (payload.payment.status === 'confirmed') {
         setSubmission('paid');
@@ -173,13 +193,36 @@ export default function Home() {
     return () => { active = false; window.clearInterval(timer); };
   }, [submission, paymentId, paymentStatus]);
 
+  useEffect(() => {
+    if (!joinOpen && !selected) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const timer = window.setTimeout(() => {
+      const panel = joinOpen ? joinDialogRef.current : detailPanelRef.current;
+      panel?.querySelector<HTMLElement>('.close-button')?.focus();
+    }, 0);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (joinOpen) setJoinOpen(false);
+      else setSelected(null);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('keydown', closeOnEscape);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [joinOpen, selected]);
+
   function openJoin(targetMinor = bidMinor, listing?: BoardItem) {
     const value = quickInput.trim();
     const isHandle = value.startsWith('@');
     const handle = listing?.handle ?? (isHandle ? value : '');
     const url = listing?.destinationUrl ?? (isHandle ? `https://instagram.com/${value.slice(1)}` : value.startsWith('https://') ? value : '');
     setFormSeed({ name: listing?.name ?? '', handle, url, category: listing?.category ?? quickCategory, boostMajor: targetMinor / 100, requestKey: crypto.randomUUID() });
-    setPayment(null); setQrImage(''); setCopied(false); setAvatarPreview(''); setCheckoutStep(1); setCheckoutPreview(null); setErrorMessage(''); setSubmission('idle'); setJoinOpen(true);
+    setPayment(null); setQrImage(''); setCopyStatus('idle'); setPaymentSync('idle'); setAvatarPreview(''); setCheckoutStep(1); setCheckoutPreview(null); setErrorMessage(''); setSubmission('idle'); setJoinOpen(true);
   }
 
   function continueToPayment(form: HTMLFormElement) {
@@ -188,9 +231,29 @@ export default function Home() {
       if ((field instanceof HTMLInputElement || field instanceof HTMLSelectElement) && !field.reportValidity()) return;
     }
     const data = new FormData(form);
+    const rawHandle = String(data.get('handle') ?? '').trim();
+    const normalizedHandle = rawHandle.replace(/^https?:\/\/(?:www\.)?instagram\.com\//i, '').split(/[/?#]/)[0].replace(/^@/, '');
+    const name = String(data.get('name') ?? '').trim();
+    const selectedCategory = String(data.get('category') ?? '');
     const amountMinor = Math.round(Number(data.get('requestedBoostMajor')) * 100);
-    setCheckoutPreview({ name: String(data.get('name') ?? ''), handle: String(data.get('handle') ?? ''), amountMinor });
+    if (!/^[A-Za-z0-9._]{1,30}$/.test(normalizedHandle) || normalizedHandle.startsWith('.') || normalizedHandle.endsWith('.') || normalizedHandle.includes('..')) {
+      setErrorMessage('Informe um @ válido do Instagram, como @seuperfil.');
+      setSubmission('error');
+      return;
+    }
+    if (name.length < 2 || !listingCategories.includes(selectedCategory as Exclude<CategoryCode, 'All'>)) {
+      setErrorMessage('Preencha o nome e escolha uma categoria.');
+      setSubmission('error');
+      return;
+    }
+    if (!Number.isSafeInteger(amountMinor) || amountMinor < minBoostMinor) {
+      setErrorMessage('O lance mínimo é R$ 5 e deve usar valores inteiros.');
+      setSubmission('error');
+      return;
+    }
+    setCheckoutPreview({ name, handle: `@${normalizedHandle}`, amountMinor });
     setErrorMessage('');
+    setSubmission('idle');
     setCheckoutStep(2);
     window.setTimeout(() => form.querySelector<HTMLInputElement>('[name="buyerName"]')?.focus(), 0);
   }
@@ -250,7 +313,7 @@ export default function Home() {
     if (!response?.ok) {
       const messages: Record<string, string> = {
         invalid_fields: 'Revise o @perfil, o CPF e o e-mail informado.',
-        duplicate_handle: 'Esse perfil já está no ranking. Em breve você poderá adicionar um novo boost pelo próprio card.',
+        duplicate_handle: 'Esse perfil já está no ranking com outro e-mail. Use o e-mail original para aumentar o lance.',
         rate_limited: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente novamente.',
         payment_provider_unavailable: 'A BravoPay não conseguiu gerar o Pix agora. Tente novamente em instantes.',
         boost_too_low: 'Esse perfil já alcançou esse valor. Escolha um lance maior.',
@@ -273,10 +336,25 @@ export default function Home() {
     if (!payment?.pixCopyPaste) return;
     try {
       await navigator.clipboard.writeText(payment.pixCopyPaste);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1_800);
+      setCopyStatus('success');
+      window.setTimeout(() => setCopyStatus('idle'), 1_800);
     } catch {
-      setCopied(false);
+      setCopyStatus('error');
+    }
+  }
+
+  async function shareListing(item: BoardItem) {
+    const url = new URL(`/participant/${item.id}`, window.location.origin).toString();
+    const data = { title: `${item.handle} no Instabid`, text: `${item.handle} está em #${item.rank} no Instabid.`, url };
+    try {
+      if (navigator.share) await navigator.share(data);
+      else await navigator.clipboard.writeText(url);
+      setShareFeedback(item.id);
+      window.setTimeout(() => setShareFeedback(''), 1_800);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setShareFeedback('error');
+      window.setTimeout(() => setShareFeedback(''), 2_200);
     }
   }
 
@@ -289,24 +367,24 @@ export default function Home() {
       </header>
 
       <div className="page-column">
-        <section className="live-summary"><span className="online-dot" /><strong>{meta.onlineVisitors} online</strong><span>·</span><span>{new Intl.NumberFormat('pt-BR').format(meta.totalVisitors)} visitantes</span><span>·</span><span>{new Intl.NumberFormat('pt-BR').format(meta.totalClicks)} {text.measured}</span><a href="#ranking">tempo real ↻</a></section>
+        <section className={`live-summary ${boardStatus[boardKey] === 'stale' ? 'stale' : ''}`} aria-live="polite"><span className="online-dot" /><strong>{meta.onlineVisitors} online</strong><span>·</span><span>{new Intl.NumberFormat('pt-BR').format(meta.totalVisitors)} visitantes</span><span>·</span><span>{new Intl.NumberFormat('pt-BR').format(meta.totalClicks)} {text.measured}</span><button onClick={() => { setBoardStatus((current) => ({ ...current, [boardKey]: 'loading' })); setRefreshNonce((value) => value + 1); }} type="button">{!boardStatus[boardKey] || boardStatus[boardKey] === 'loading' ? 'atualizando…' : boardStatus[boardKey] === 'stale' ? 'reconectar ↻' : 'tempo real ↻'}</button></section>
 
         <section className="bid-hero" id="como-funciona">
-          <div className="period-switch" aria-label="Período do ranking">{(['week', 'today', 'all'] as RankingPeriod[]).map((value) => <button className={period === value ? 'active' : ''} key={value} onClick={() => setPeriod(value)} type="button">{value === 'week' && '♛ '}{text.periods[value]}</button>)}</div>
-          <div className="claim-line"><h1>{text.claim}</h1><button aria-label="Diminuir lance" onClick={() => setBidMinor((value) => Math.max(minBoostMinor, value - incrementMinor))} type="button">−</button><strong>{currency(bidMinor, market === 'br' ? 'BRL' : 'USD', market)}</strong><button aria-label="Aumentar lance" onClick={() => setBidMinor((value) => value + incrementMinor)} type="button">+</button></div>
+          <div className="period-switch" aria-label="Período do ranking">{(['week', 'today', 'all'] as RankingPeriod[]).map((value) => <button aria-pressed={period === value} className={period === value ? 'active' : ''} key={value} onClick={() => { setBoardStatus((current) => ({ ...current, [`${market}:${value}`]: 'loading' })); setPeriod(value); }} type="button">{value === 'week' && '♛ '}{text.periods[value]}</button>)}</div>
+          <div className="claim-line"><h1>{text.claim}</h1><button aria-label="Diminuir lance" disabled={bidMinor === minBoostMinor} onClick={() => setBidMinor((value) => Math.max(minBoostMinor, value - incrementMinor))} type="button">−</button><strong>{currency(bidMinor, market === 'br' ? 'BRL' : 'USD', market)}</strong><button aria-label="Aumentar lance" onClick={() => setBidMinor((value) => value + incrementMinor)} type="button">+</button></div>
           <p><b>{text.spots}</b> {text.explainer}</p>
-          <div className="quick-entry"><label><span>◎</span><input aria-label={text.input} onChange={(event) => setQuickInput(event.target.value)} placeholder={text.input} value={quickInput} /></label><label><span>◇</span><select aria-label={text.choose} onChange={(event) => setQuickCategory(event.target.value)} value={quickCategory}><option value="" disabled>{text.choose}</option><option value="Creators">{localizedCategory('Creators', market)}</option><option value="Brands">{localizedCategory('Brands', market)}</option><option value="Tools">{localizedCategory('Tools', market)}</option><option value="Products">{localizedCategory('Products', market)}</option><option value="Services">{localizedCategory('Services', market)}</option></select></label><button onClick={() => openJoin()} type="button">{text.action}<span>↗</span></button></div>
+          <div className="quick-entry"><label><span>◎</span><input aria-label={text.input} onChange={(event) => setQuickInput(event.target.value)} placeholder={text.input} value={quickInput} /></label><label><span>◇</span><select aria-label={text.choose} onChange={(event) => setQuickCategory(event.target.value)} value={quickCategory}><option value="" disabled>{text.choose}</option>{listingCategories.map((code) => <option key={code} value={code}>{localizedCategory(code, market)}</option>)}</select></label><button onClick={() => openJoin()} type="button">{text.action}<span>↗</span></button></div>
           <small>{text.already}</small>
         </section>
 
         <section className="ranking" id="ranking">
-          <div className="category-tabs" id="categorias">{categoryCodes.map((code, index) => <button className={category === code ? 'active' : ''} key={code} onClick={() => setCategory(code)} type="button"><i>{['▦', '◉', '◆', '⌁', '✦'][index]}</i>{text.categories[code]}</button>)}</div>
+          <div className="category-tabs" id="categorias">{categoryCodes.map((code, index) => <button aria-pressed={category === code} className={category === code ? 'active' : ''} key={code} onClick={() => setCategory(code)} type="button"><i>{categoryIcons[index]}</i>{text.categories[code]}</button>)}</div>
           <div className="ranking-list">
             {!visibleBoard.length && <p className="empty-board">{text.empty}</p>}
-            {visibleBoard.map((item, index) => {
+            {visibleBoard.map((item) => {
               const challengeMinor = Math.max(minBoostMinor, item.totalMinor + incrementMinor);
               const awaitingFirstBid = item.placementType === 'launch_partner' && item.totalMinor === 0;
-              return <article className={`ranking-card ${index < 3 ? `podium podium-${index + 1}` : 'compact'} ${awaitingFirstBid ? 'awaiting-bid' : ''}`} key={item.id} onClick={() => setSelected(item)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(item); }}>
+              return <article aria-label={`Abrir detalhes de ${item.handle}`} className={`ranking-card ${item.rank <= 3 ? `podium podium-${item.rank}` : 'compact'} ${awaitingFirstBid ? 'awaiting-bid' : ''}`} key={item.id} onClick={() => setSelected(item)} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(item); } }}>
                 <div className="profile-identity"><div className="rank-chip">#{item.rank}</div><ProfileAvatar item={item} /></div>
                 <div className="project-copy"><div className="profile-title"><strong>{item.handle}</strong><span>{item.name}</span></div><p>{item.description}</p><div className="meta-line"><span>◇ {localizedCategory(item.category, market)}</span>{awaitingFirstBid && <span className="partner-label">Perfil convidado</span>}<b><i /> {item.clicks} {text.clicks}</b></div></div>
                 <div className={`bid-status ${awaitingFirstBid ? 'first-bid' : ''}`}><small>{awaitingFirstBid ? 'DISPONÍVEL PARA' : 'LANCE ATUAL'}</small><strong>{awaitingFirstBid ? 'Lance inaugural' : item.bid}</strong></div>
@@ -324,10 +402,10 @@ export default function Home() {
 
       <footer><a className="footer-brand" href="#top">Instabid</a><p>{text.footer}</p><nav><a href="/rules">{text.legal[0]}</a><a href="/privacy">{text.legal[1]}</a><a href="/about">{text.legal[2]}</a></nav></footer>
 
-      {selected && <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}><aside className="detail-panel" aria-label={selected.handle}><button className="close-button" onClick={() => setSelected(null)} type="button">{text.close} ×</button><ProfileAvatar item={selected} detail /><p className="detail-rank">#{selected.rank} · {localizedCategory(selected.category, market)}</p><h3>{selected.handle}</h3><span className="detail-handle">{selected.name}</span><p>{selected.description}</p><div className="detail-stats"><div><small>{selected.totalMinor === 0 ? 'status' : 'lance confirmado'}</small><b>{selected.totalMinor === 0 ? 'Lance inaugural' : selected.bid}</b></div><div><small>{text.clicks}</small><b>{selected.clicks}</b></div></div><p className="sponsor-disclosure">◎ {selected.placementType === 'launch_partner' ? 'Perfil convidado · aguardando primeiro lance confirmado' : text.sponsored}</p><a className="detail-link" href={`/go/${selected.id}`} target="_blank" rel="sponsored noopener noreferrer">{text.visit}<span>↗</span></a><a className="public-page-link" href={`/participant/${selected.id}`}>{text.page}<span>→</span></a><button className="detail-challenge" onClick={() => { setSelected(null); openJoin(Math.max(minBoostMinor, selected.totalMinor + incrementMinor), selected); }} type="button">{selected.totalMinor === 0 ? 'Dar o primeiro lance' : text.challenge}<span>→</span></button></aside></div>}
+      {selected && <div className="overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelected(null); }}><aside aria-label={`Detalhes de ${selected.handle}`} aria-modal="true" className="detail-panel" ref={detailPanelRef} role="dialog" tabIndex={-1}><button className="close-button" onClick={() => setSelected(null)} type="button">{text.close} ×</button><ProfileAvatar item={selected} detail /><p className="detail-rank">#{selected.rank} · {localizedCategory(selected.category, market)}</p><h3>{selected.handle}</h3><span className="detail-handle">{selected.name}</span><p>{selected.description}</p><div className="detail-stats"><div><small>{selected.totalMinor === 0 ? 'status' : 'lance confirmado'}</small><b>{selected.totalMinor === 0 ? 'Lance inaugural' : selected.bid}</b></div><div><small>{text.clicks}</small><b>{selected.clicks}</b></div></div><p className="sponsor-disclosure">◎ {selected.placementType === 'launch_partner' ? 'Perfil convidado · aguardando primeiro lance confirmado' : text.sponsored}</p><a className="detail-link" href={`/go/${selected.id}`} target="_blank" rel="sponsored noopener noreferrer">{text.visit}<span>↗</span></a><div className="detail-secondary-actions"><a className="public-page-link" href={`/participant/${selected.id}`}>{text.page}<span>→</span></a><button className="share-button" onClick={() => void shareListing(selected)} type="button">{shareFeedback === selected.id ? 'Link copiado ✓' : shareFeedback === 'error' ? 'Não foi possível copiar' : 'Compartilhar'}<span>↗</span></button></div><button className="detail-challenge" onClick={() => { setSelected(null); openJoin(Math.max(minBoostMinor, selected.totalMinor + incrementMinor), selected); }} type="button">{selected.totalMinor === 0 ? 'Dar o primeiro lance' : text.challenge}<span>→</span></button></aside></div>}
 
       {joinOpen && <div className="overlay form-overlay" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setJoinOpen(false); }}>
-        <section className="join-modal" aria-modal="true" role="dialog" aria-labelledby="join-title">
+        <section className="join-modal" aria-modal="true" role="dialog" aria-labelledby="join-title" ref={joinDialogRef} tabIndex={-1}>
           <button className="close-button" onClick={() => setJoinOpen(false)} type="button">{text.close} ×</button>
           {submission === 'paid' || submission === 'success' || submission === 'preview' ? <div className="success-state">
             <span>{submission === 'preview' ? '!' : '✓'}</span>
@@ -335,15 +413,16 @@ export default function Home() {
             <p>{submission === 'preview' ? text.previewBody : text.successBody}</p>
             <button onClick={() => { setJoinOpen(false); if (submission === 'paid') window.location.hash = 'ranking'; }} type="button">{submission === 'paid' ? 'Ver ranking' : 'OK'}</button>
           </div> : submission === 'payment' && payment ? <div className="pix-state">
-            <p className={`payment-status ${payment.status}`}>{payment.status === 'failed' ? 'Pix expirado' : '● Aguardando confirmação'}</p>
+            <p className={`payment-status ${payment.status}`}>{payment.status === 'failed' ? 'Pix não disponível' : paymentSync === 'retrying' ? '● Reconectando confirmação' : '● Aguardando confirmação'}</p>
             <h3 id="join-title">Pague {currency(payment.amountMinor, 'BRL', 'br')}</h3>
             <p className="modal-intro">Escaneie o QR Code ou copie o código Pix. Sua posição entra automaticamente após a confirmação.</p>
-            {payment.status === 'failed' ? <div className="pix-expired">Esta cobrança expirou. Gere um novo Pix para entrar na disputa.</div> : <>
+            {payment.status === 'failed' ? <div className="pix-expired">Esta cobrança não está mais disponível. Gere um novo Pix para entrar na disputa.</div> : !payment.pixCopyPaste ? <div className="pix-expired">O código Pix não foi recebido. Gere uma nova cobrança; nenhuma posição foi alterada.</div> : <>
               <div className="pix-qr">{qrImage ? <Image src={qrImage} alt="QR Code Pix para pagamento" width={260} height={260} unoptimized /> : <span>Gerando QR Code…</span>}</div>
-              <div className="pix-copy"><span>{payment.pixCopyPaste}</span><button onClick={copyPix} type="button">{copied ? 'Copiado!' : 'Copiar Pix'}</button></div>
-              <small className="pix-note">Confirmação automática e segura pela BravoPay. Não feche esta tela até o pagamento ser reconhecido.</small>
+              <div className={`pix-copy ${copyStatus === 'error' ? 'copy-error' : ''}`}><span>{payment.pixCopyPaste}</span><button onClick={copyPix} type="button">{copyStatus === 'success' ? 'Copiado!' : copyStatus === 'error' ? 'Tentar copiar' : 'Copiar Pix'}</button></div>
+              {copyStatus === 'error' && <small className="copy-help">A cópia automática falhou. Toque e segure o código acima para copiar manualmente.</small>}
+              <small className="pix-note">Confirmação automática e segura pela BravoPay. Você pode continuar navegando; o ranking atualiza assim que o pagamento for reconhecido.</small>
             </>}
-            <button className="pix-back" onClick={() => { setPayment(null); setSubmission('idle'); setFormSeed((current) => ({ ...current, requestKey: crypto.randomUUID() })); }} type="button">{payment.status === 'failed' ? 'Gerar novo Pix' : 'Voltar e revisar'}</button>
+            <button className="pix-back" onClick={() => { setPayment(null); setSubmission('idle'); setCopyStatus('idle'); setFormSeed((current) => ({ ...current, requestKey: crypto.randomUUID() })); }} type="button">{payment.status === 'failed' || !payment.pixCopyPaste ? 'Gerar novo Pix' : 'Voltar e revisar'}</button>
           </div> : <>
             <p className="modal-kicker">{market === 'br' ? 'BR · PIX · BRAVOPAY' : 'WORLD · USD'} · {text.sponsored}</p>
             <h3 id="join-title">{text.modalTitle}</h3>
@@ -361,6 +440,7 @@ export default function Home() {
                   </div>
                   <label className="boost-field">Seu lance <span>mínimo R$ 5</span><div><b>R$</b><input defaultValue={formSeed.boostMajor} min={minBoostMinor / 100} max={999999} name="requestedBoostMajor" required step="1" type="number" inputMode="numeric" /></div></label>
                   <p className="checkout-hint">Você entra na melhor posição que esse valor alcançar. Se o @ já estiver no ranking, o Pix cobra somente a diferença.</p>
+                  {submission === 'error' && <p className="form-error">{errorMessage}</p>}
                   <button className="submit-button" onClick={(event) => { if (event.currentTarget.form) continueToPayment(event.currentTarget.form); }} type="button">Continuar para o Pix <span>→</span></button>
                 </div>
 

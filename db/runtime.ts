@@ -1,6 +1,7 @@
 let initialized = false;
 
 const isVercel = process.env.VERCEL === '1';
+const publicMetricsSince = process.env.INSTABID_METRICS_SINCE ?? '2026-08-25T00:05:43.000Z';
 
 async function getCloudflareDatabase() {
   const runtime = await import('cloudflare:workers') as { env: { DB: D1Database } };
@@ -127,6 +128,9 @@ export async function ensureDatabase() {
     await db.prepare('ALTER TABLE listings ADD COLUMN image_url TEXT').run();
   }
   await db.batch([
+    db.prepare("DELETE FROM click_events WHERE listing_id IN (SELECT listing_id FROM boosts WHERE provider = 'demo')"),
+    db.prepare("DELETE FROM listings WHERE placement_type != 'launch_partner' AND id IN (SELECT listing_id FROM boosts WHERE provider = 'demo')"),
+    db.prepare("DELETE FROM boosts WHERE provider = 'demo'"),
     db.prepare("INSERT OR IGNORE INTO markets (code, locale, currency, min_boost_minor, status) VALUES ('br', 'pt-BR', 'BRL', 500, 'active')"),
     db.prepare("UPDATE markets SET min_boost_minor = 500 WHERE code = 'br'"),
     db.prepare("INSERT OR IGNORE INTO markets (code, locale, currency, min_boost_minor, status) VALUES ('world', 'en', 'USD', 500, 'active')"),
@@ -137,7 +141,11 @@ export async function ensureDatabase() {
       destination_url = 'https://instagram.com/resolv.all', image_url = '/resolv-all-avatar.jpg', category = 'Services'
       WHERE id = 'partner-nexoflow' AND placement_type = 'launch_partner'
         AND NOT EXISTS (SELECT 1 FROM boosts WHERE listing_id = 'partner-nexoflow' AND status = 'confirmed')`),
-    db.prepare("UPDATE listings SET image_url = '/logo-emblem.png' WHERE id = 'partner-instabid'"),
+    db.prepare(`UPDATE listings SET name = 'Instabid', handle = '@instabid.br',
+      description = 'Perfil oficial da disputa brasileira por atenção.',
+      destination_url = 'https://instagram.com/instabid.br', image_url = '/logo-emblem.png', category = 'Communities'
+      WHERE id = 'partner-instabid' AND placement_type = 'launch_partner'
+        AND NOT EXISTS (SELECT 1 FROM boosts WHERE listing_id = 'partner-instabid' AND status = 'confirmed')`),
   ]);
 
   for (const [id, market, name, handle, description, url, imageUrl, email, category, clicks, placementType] of demoListings) {
@@ -389,9 +397,10 @@ export async function getAudienceMetrics() {
   if (isVercel) return { totalVisitors: 0, onlineVisitors: 0 };
   const db = await ensureDatabase();
   const onlineSince = new Date(Date.now() - 5 * 60_000).toISOString();
-  const result = await db.prepare(`SELECT COUNT(*) AS totalVisitors,
+  const result = await db.prepare(`SELECT
+      SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) AS totalVisitors,
       SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) AS onlineVisitors
-    FROM visit_events`).bind(onlineSince).first<{ totalVisitors: number; onlineVisitors: number }>();
+    FROM visit_events`).bind(publicMetricsSince, onlineSince > publicMetricsSince ? onlineSince : publicMetricsSince).first<{ totalVisitors: number; onlineVisitors: number }>();
   return { totalVisitors: Number(result?.totalVisitors ?? 0), onlineVisitors: Number(result?.onlineVisitors ?? 0) };
 }
 

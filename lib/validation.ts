@@ -16,7 +16,8 @@ export const allowedCategories = ['Creators', 'Brands', 'Tools', 'Products', 'Se
 export function normalizeInstagramHandle(value: unknown) {
   const raw = String(value ?? '').trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').split(/[/?#]/)[0];
   const handle = `@${raw.replace(/^@/, '')}`.toLowerCase();
-  return /^@[a-z0-9._]{1,30}$/.test(handle) ? handle : null;
+  const username = handle.slice(1);
+  return /^@[a-z0-9._]{1,30}$/.test(handle) && !username.startsWith('.') && !username.endsWith('.') && !username.includes('..') ? handle : null;
 }
 
 function isPrivateIpv4(hostname: string) {
