@@ -316,6 +316,7 @@ export default function Home() {
         duplicate_handle: 'Esse perfil já está no ranking com outro e-mail. Use o e-mail original para aumentar o lance.',
         rate_limited: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente novamente.',
         payment_provider_unavailable: 'A BravoPay não conseguiu gerar o Pix agora. Tente novamente em instantes.',
+        preview_only: 'Este link da Vercel é apenas para acompanhar o visual. O Pix funciona somente na publicação com banco persistente.',
         boost_too_low: 'Esse perfil já alcançou esse valor. Escolha um lance maior.',
         invalid_avatar: 'A foto não pôde ser validada. Use PNG, JPG ou WebP de até 750 KB.',
         payload_too_large: 'A foto é grande demais. Use uma imagem de até 750 KB.',
