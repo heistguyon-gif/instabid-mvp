@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createBravopayPix, normalizeBuyer, normalizeTransaction, verifyBravopayWebhook } from '../lib/bravopay.ts';
 import { isAllowedCategory, isAllowedListingContent, normalizeDestination, normalizeInstagramHandle } from '../lib/validation.ts';
+import { formatBrazilianDocument, formatPaymentCountdown, isPaymentId, paymentRemainingSeconds } from '../lib/payment.ts';
 
 test('valida e normaliza os dados enviados ao Pix', () => {
   assert.deepEqual(normalizeBuyer({
@@ -101,4 +102,17 @@ test('mantém as seis categorias aceitas no checkout e no ranking', () => {
     assert.equal(isAllowedCategory(category), true);
   }
   assert.equal(isAllowedCategory('Adult'), false);
+});
+
+test('formata documentos brasileiros sem alterar os dígitos', () => {
+  assert.equal(formatBrazilianDocument('52998224725'), '529.982.247-25');
+  assert.equal(formatBrazilianDocument('04.252.011/0001-10'), '04.252.011/0001-10');
+});
+
+test('valida recuperação e contagem regressiva do Pix', () => {
+  assert.equal(isPaymentId('pay_1234567890abcdef1234567890abcdef'), true);
+  assert.equal(isPaymentId('pay_invalido'), false);
+  assert.equal(paymentRemainingSeconds('2026-08-25T00:10:00.000Z', Date.parse('2026-08-25T00:09:01.000Z')), 59);
+  assert.equal(paymentRemainingSeconds('2026-08-25T00:09:00.000Z', Date.parse('2026-08-25T00:09:01.000Z')), 0);
+  assert.equal(formatPaymentCountdown(125), '2:05');
 });

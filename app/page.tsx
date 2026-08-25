@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import QRCode from 'qrcode';
 import { BrandMark } from '@/components/BrandMark';
+import { normalizeInstagramHandle } from '@/lib/validation';
+import { formatBrazilianDocument, formatPaymentCountdown, isPaymentId, paymentRemainingSeconds, PENDING_PAYMENT_STORAGE_KEY } from '@/lib/payment';
 
 type Market = 'br' | 'world';
 type RankingPeriod = 'week' | 'today' | 'all';
@@ -16,7 +18,7 @@ type BoardItem = {
 type BoardMeta = { activeListings: number; totalClicks: number; totalVisitors: number; onlineVisitors: number; generatedAt: string; dataMode: 'demo' | 'pilot' };
 type PaymentView = {
   id: string; status: string; amountMinor: number; currency: string;
-  pixCopyPaste: string | null; expiresAt: string | null;
+  pixCopyPaste: string | null; expiresAt: string | null; listingName?: string; listingHandle?: string;
 };
 type CheckoutPreview = { name: string; handle: string; amountMinor: number };
 
@@ -35,7 +37,7 @@ const copy = {
     nav: ['Ranking', 'Regras', 'Como funciona'], projects: 'projetos no ranking', measured: 'cliques mensurados', updated: 'atualizado agora',
     demo: 'Ambiente demonstrativo: projetos e números atuais são exemplos. Dados reais entram no piloto.',
     claim: 'Assuma o #1 por', spots: 'Novas posições começam em R$ 5.', explainer: 'O preço cresce com a disputa: você entra na melhor posição que o lance alcançar.',
-    input: 'URL do produto ou @perfil', choose: 'Escolha uma categoria', action: 'Entrar na disputa',
+    input: 'Seu @ do Instagram', choose: 'Escolha uma categoria', action: 'Entrar na disputa',
     already: 'Já está na lista? Use o mesmo @ e pague somente a diferença para subir.',
     periods: { week: 'Esta semana', today: 'Últimas 24h', all: 'Histórico' }, categories: { All: 'Todos', Creators: 'Criadores', Brands: 'Marcas', Tools: 'Ferramentas', Products: 'Produtos', Services: 'Serviços', Communities: 'Comunidades' },
     clicks: 'cliques válidos', details: 'ver detalhes', rulesTitle: 'Ranking verificável, não caixa-preta',
@@ -103,6 +105,9 @@ export default function Home() {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [shareFeedback, setShareFeedback] = useState('');
   const [paymentSync, setPaymentSync] = useState<'idle' | 'checking' | 'retrying'>('idle');
+  const [recoverablePayment, setRecoverablePayment] = useState<PaymentView | null>(null);
+  const [recoveryNotice, setRecoveryNotice] = useState('');
+  const [clock, setClock] = useState(() => Date.now());
   const [avatarPreview, setAvatarPreview] = useState('');
   const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
   const [checkoutPreview, setCheckoutPreview] = useState<CheckoutPreview | null>(null);
@@ -124,6 +129,9 @@ export default function Home() {
   const visibleBoard = useMemo(() => category === 'All' ? board : board.filter((item) => (categoryAliases[item.category] ?? item.category) === category), [board, category]);
   const paymentId = payment?.id;
   const paymentStatus = payment?.status;
+  const remainingSeconds = paymentRemainingSeconds(payment?.expiresAt, clock);
+  const countdown = formatPaymentCountdown(remainingSeconds);
+  const pendingBannerPayment = recoverablePayment ?? (paymentStatus === 'pending' ? payment : null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -157,6 +165,49 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const storedId = window.localStorage.getItem(PENDING_PAYMENT_STORAGE_KEY);
+    if (!isPaymentId(storedId)) {
+      window.localStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY);
+      return;
+    }
+    let active = true;
+    fetch(`/api/payments/${encodeURIComponent(storedId as string)}`, { cache: 'no-store' })
+      .then((response) => {
+        if (response.status === 400 || response.status === 404) {
+          window.localStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY);
+          return {} as { payment?: PaymentView };
+        }
+        return response.ok ? response.json() as Promise<{ payment?: PaymentView }> : Promise.reject();
+      })
+      .then((payload) => {
+        if (!active || !payload.payment) return;
+        if (payload.payment.status === 'pending') setRecoverablePayment(payload.payment);
+        else {
+          window.localStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY);
+          if (payload.payment.status === 'confirmed') {
+            setRecoveryNotice('Pagamento confirmado — o ranking já foi atualizado.');
+            setRemoteBoards({});
+            setRefreshNonce((value) => value + 1);
+          }
+        }
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!payment) return;
+    if (payment.status === 'pending') window.localStorage.setItem(PENDING_PAYMENT_STORAGE_KEY, payment.id);
+    else window.localStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY);
+  }, [payment]);
+
+  useEffect(() => {
+    if (submission !== 'payment' || paymentStatus !== 'pending' || !payment?.expiresAt) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [submission, paymentStatus, payment?.expiresAt]);
+
+  useEffect(() => {
     if (!payment?.pixCopyPaste) return;
     let active = true;
     QRCode.toDataURL(payment.pixCopyPaste, { width: 260, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#17185b', light: '#ffffff' } })
@@ -164,6 +215,11 @@ export default function Home() {
       .catch(() => setQrImage(''));
     return () => { active = false; };
   }, [payment?.pixCopyPaste]);
+
+  useEffect(() => {
+    if (!avatarPreview.startsWith('blob:')) return;
+    return () => URL.revokeObjectURL(avatarPreview);
+  }, [avatarPreview]);
 
   useEffect(() => {
     if (submission !== 'payment' || !paymentId || paymentStatus !== 'pending') return;
@@ -184,6 +240,8 @@ export default function Home() {
       setPayment(payload.payment);
       if (payload.payment.status === 'confirmed') {
         setSubmission('paid');
+        setRecoverablePayment(null);
+        setRecoveryNotice('');
         setRemoteBoards({});
         setRefreshNonce((value) => value + 1);
       }
@@ -203,9 +261,25 @@ export default function Home() {
       panel?.querySelector<HTMLElement>('.close-button')?.focus();
     }, 0);
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (joinOpen) setJoinOpen(false);
-      else setSelected(null);
+      const panel = joinOpen ? joinDialogRef.current : detailPanelRef.current;
+      if (event.key === 'Escape') {
+        if (joinOpen) setJoinOpen(false);
+        else setSelected(null);
+        return;
+      }
+      if (event.key !== 'Tab' || !panel) return;
+      const focusable = [...panel.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+        .filter((element) => element.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', closeOnEscape);
     return () => {
@@ -218,10 +292,11 @@ export default function Home() {
 
   function openJoin(targetMinor = bidMinor, listing?: BoardItem) {
     const value = quickInput.trim();
-    const isHandle = value.startsWith('@');
-    const handle = listing?.handle ?? (isHandle ? value : '');
-    const url = listing?.destinationUrl ?? (isHandle ? `https://instagram.com/${value.slice(1)}` : value.startsWith('https://') ? value : '');
-    setFormSeed({ name: listing?.name ?? '', handle, url, category: listing?.category ?? quickCategory, boostMajor: targetMinor / 100, requestKey: crypto.randomUUID() });
+    const normalizedQuickHandle = normalizeInstagramHandle(value.startsWith('instagram.com/') ? `https://${value}` : value);
+    const handle = listing?.handle ?? normalizedQuickHandle ?? '';
+    const url = listing?.destinationUrl ?? (handle ? `https://instagram.com/${handle.slice(1)}` : '');
+    const suggestedName = handle ? handle.slice(1) : '';
+    setFormSeed({ name: listing?.name ?? suggestedName, handle, url, category: listing?.category ?? quickCategory, boostMajor: targetMinor / 100, requestKey: crypto.randomUUID() });
     setPayment(null); setQrImage(''); setCopyStatus('idle'); setPaymentSync('idle'); setAvatarPreview(''); setCheckoutStep(1); setCheckoutPreview(null); setErrorMessage(''); setSubmission('idle'); setJoinOpen(true);
   }
 
@@ -231,12 +306,11 @@ export default function Home() {
       if ((field instanceof HTMLInputElement || field instanceof HTMLSelectElement) && !field.reportValidity()) return;
     }
     const data = new FormData(form);
-    const rawHandle = String(data.get('handle') ?? '').trim();
-    const normalizedHandle = rawHandle.replace(/^https?:\/\/(?:www\.)?instagram\.com\//i, '').split(/[/?#]/)[0].replace(/^@/, '');
+    const normalizedHandle = normalizeInstagramHandle(data.get('handle'));
     const name = String(data.get('name') ?? '').trim();
     const selectedCategory = String(data.get('category') ?? '');
     const amountMinor = Math.round(Number(data.get('requestedBoostMajor')) * 100);
-    if (!/^[A-Za-z0-9._]{1,30}$/.test(normalizedHandle) || normalizedHandle.startsWith('.') || normalizedHandle.endsWith('.') || normalizedHandle.includes('..')) {
+    if (!normalizedHandle) {
       setErrorMessage('Informe um @ válido do Instagram, como @seuperfil.');
       setSubmission('error');
       return;
@@ -251,7 +325,7 @@ export default function Home() {
       setSubmission('error');
       return;
     }
-    setCheckoutPreview({ name, handle: `@${normalizedHandle}`, amountMinor });
+    setCheckoutPreview({ name, handle: normalizedHandle, amountMinor });
     setErrorMessage('');
     setSubmission('idle');
     setCheckoutStep(2);
@@ -284,11 +358,16 @@ export default function Home() {
         return;
       }
     }
-    const rawHandle = String(form.get('handle') ?? '').trim();
-    const normalizedHandle = rawHandle.replace(/^https?:\/\/(?:www\.)?instagram\.com\//i, '').split(/[/?#]/)[0].replace(/^@/, '');
-    const destinationUrl = `https://instagram.com/${normalizedHandle}`;
+    const normalizedHandle = normalizeInstagramHandle(form.get('handle'));
+    if (!normalizedHandle) {
+      setErrorMessage('Informe um @ válido do Instagram.');
+      setSubmission('error');
+      setCheckoutStep(1);
+      return;
+    }
+    const destinationUrl = `https://instagram.com/${normalizedHandle.slice(1)}`;
     const projectName = String(form.get('name') ?? '').trim();
-    const description = `Conheça ${projectName} (@${normalizedHandle}) no Instagram.`;
+    const description = `Conheça ${projectName} (${normalizedHandle}) no Instagram.`;
     const endpoint = market === 'br' ? '/api/checkout/pix' : '/api/listings';
     const urlParams = new URLSearchParams(window.location.search);
     const tracking = Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'ttclid', 'gclid', 'src', 'sck']
@@ -297,7 +376,7 @@ export default function Home() {
       ? {
           ...fields,
           market,
-          handle: `@${normalizedHandle}`,
+          handle: normalizedHandle,
           destinationUrl,
           description,
           avatarDataUrl,
@@ -318,6 +397,9 @@ export default function Home() {
         payment_provider_unavailable: 'A BravoPay não conseguiu gerar o Pix agora. Tente novamente em instantes.',
         preview_only: 'Este link da Vercel é apenas para acompanhar o visual. O Pix funciona somente na publicação com banco persistente.',
         boost_too_low: 'Esse perfil já alcançou esse valor. Escolha um lance maior.',
+        idempotency_conflict: 'Esta tentativa já foi usada com outro valor. Feche o checkout e tente novamente.',
+        invalid_request_key: 'A sessão do checkout expirou. Feche esta janela e tente novamente.',
+        payment_creation_failed: 'A cobrança não foi criada. Nenhuma posição foi alterada; tente novamente em instantes.',
         invalid_avatar: 'A foto não pôde ser validada. Use PNG, JPG ou WebP de até 750 KB.',
         payload_too_large: 'A foto é grande demais. Use uma imagem de até 750 KB.',
       };
@@ -359,6 +441,28 @@ export default function Home() {
     }
   }
 
+  function resumePayment(item: PaymentView) {
+    setPayment(item);
+    setRecoverablePayment(null);
+    setSubmission('payment');
+    setCopyStatus('idle');
+    setPaymentSync('idle');
+    setClock(Date.now());
+    setJoinOpen(true);
+  }
+
+  function leavePaymentFlow() {
+    if (payment?.status === 'pending' && payment.pixCopyPaste) {
+      setRecoverablePayment(payment);
+      setJoinOpen(false);
+      return;
+    }
+    setPayment(null);
+    setSubmission('idle');
+    setCopyStatus('idle');
+    setFormSeed((current) => ({ ...current, requestKey: crypto.randomUUID() }));
+  }
+
   return (
     <main className="site-shell" id="top">
       <header className="topbar">
@@ -368,6 +472,8 @@ export default function Home() {
       </header>
 
       <div className="page-column">
+        {recoveryNotice && <section className="recovery-banner success" aria-live="polite"><div><strong>✓ Tudo certo</strong><span>{recoveryNotice}</span></div><button aria-label="Fechar aviso" onClick={() => setRecoveryNotice('')} type="button">×</button></section>}
+        {pendingBannerPayment && !joinOpen && <section className="recovery-banner" aria-live="polite"><div><strong>Você tem um Pix pendente</strong><span>{pendingBannerPayment.listingHandle || pendingBannerPayment.listingName || 'Seu perfil'} · {currency(pendingBannerPayment.amountMinor, 'BRL', 'br')}</span></div><button onClick={() => resumePayment(pendingBannerPayment)} type="button">Acompanhar pagamento →</button></section>}
         <section className={`live-summary ${boardStatus[boardKey] === 'stale' ? 'stale' : ''}`} aria-live="polite"><span className="online-dot" /><strong>{meta.onlineVisitors} online</strong><span>·</span><span>{new Intl.NumberFormat('pt-BR').format(meta.totalVisitors)} visitantes</span><span>·</span><span>{new Intl.NumberFormat('pt-BR').format(meta.totalClicks)} {text.measured}</span><button onClick={() => { setBoardStatus((current) => ({ ...current, [boardKey]: 'loading' })); setRefreshNonce((value) => value + 1); }} type="button">{!boardStatus[boardKey] || boardStatus[boardKey] === 'loading' ? 'atualizando…' : boardStatus[boardKey] === 'stale' ? 'reconectar ↻' : 'tempo real ↻'}</button></section>
 
         <section className="bid-hero" id="como-funciona">
@@ -414,16 +520,17 @@ export default function Home() {
             <p>{submission === 'preview' ? text.previewBody : text.successBody}</p>
             <button onClick={() => { setJoinOpen(false); if (submission === 'paid') window.location.hash = 'ranking'; }} type="button">{submission === 'paid' ? 'Ver ranking' : 'OK'}</button>
           </div> : submission === 'payment' && payment ? <div className="pix-state">
-            <p className={`payment-status ${payment.status}`}>{payment.status === 'failed' ? 'Pix não disponível' : paymentSync === 'retrying' ? '● Reconectando confirmação' : '● Aguardando confirmação'}</p>
+            <p className={`payment-status ${payment.status}`}>{payment.status === 'failed' ? 'Pix não disponível' : payment.status === 'refunded' ? 'Pagamento estornado' : paymentSync === 'retrying' ? '● Reconectando confirmação' : '● Aguardando confirmação'}</p>
             <h3 id="join-title">Pague {currency(payment.amountMinor, 'BRL', 'br')}</h3>
             <p className="modal-intro">Escaneie o QR Code ou copie o código Pix. Sua posição entra automaticamente após a confirmação.</p>
-            {payment.status === 'failed' ? <div className="pix-expired">Esta cobrança não está mais disponível. Gere um novo Pix para entrar na disputa.</div> : !payment.pixCopyPaste ? <div className="pix-expired">O código Pix não foi recebido. Gere uma nova cobrança; nenhuma posição foi alterada.</div> : <>
+            {payment.status === 'failed' ? <div className="pix-expired">Esta cobrança não está mais disponível. Gere um novo Pix para entrar na disputa.</div> : payment.status === 'refunded' ? <div className="pix-expired">O pagamento foi estornado e não está contando no ranking. Fale com @instabid.br se precisar de ajuda.</div> : !payment.pixCopyPaste ? <div className="pix-expired">O código Pix não foi recebido. Gere uma nova cobrança; nenhuma posição foi alterada.</div> : <>
+              {remainingSeconds !== null && <div className={`pix-timer ${remainingSeconds === 0 ? 'expired' : ''}`}>{remainingSeconds > 0 ? `Pix válido por ${countdown}` : 'Tempo estimado encerrado · verificando o status'}</div>}
               <div className="pix-qr">{qrImage ? <Image src={qrImage} alt="QR Code Pix para pagamento" width={260} height={260} unoptimized /> : <span>Gerando QR Code…</span>}</div>
               <div className={`pix-copy ${copyStatus === 'error' ? 'copy-error' : ''}`}><span>{payment.pixCopyPaste}</span><button onClick={copyPix} type="button">{copyStatus === 'success' ? 'Copiado!' : copyStatus === 'error' ? 'Tentar copiar' : 'Copiar Pix'}</button></div>
               {copyStatus === 'error' && <small className="copy-help">A cópia automática falhou. Toque e segure o código acima para copiar manualmente.</small>}
               <small className="pix-note">Confirmação automática e segura pela BravoPay. Você pode continuar navegando; o ranking atualiza assim que o pagamento for reconhecido.</small>
             </>}
-            <button className="pix-back" onClick={() => { setPayment(null); setSubmission('idle'); setCopyStatus('idle'); setFormSeed((current) => ({ ...current, requestKey: crypto.randomUUID() })); }} type="button">{payment.status === 'failed' || !payment.pixCopyPaste ? 'Gerar novo Pix' : 'Voltar e revisar'}</button>
+            <button className="pix-back" onClick={leavePaymentFlow} type="button">{payment.status === 'failed' || !payment.pixCopyPaste ? 'Gerar novo Pix' : payment.status === 'refunded' ? 'Fechar' : 'Fechar e pagar depois'}</button>
           </div> : <>
             <p className="modal-kicker">{market === 'br' ? 'BR · PIX · BRAVOPAY' : 'WORLD · USD'} · {text.sponsored}</p>
             <h3 id="join-title">{text.modalTitle}</h3>
@@ -434,7 +541,7 @@ export default function Home() {
 
                 <div className={`checkout-step full ${checkoutStep === 1 ? 'active' : ''}`} data-checkout-step="project">
                   <label className="full">Perfil do Instagram<input defaultValue={formSeed.handle || formSeed.url} name="handle" required placeholder="@seuperfil" maxLength={80} autoCapitalize="none" autoCorrect="off" /></label>
-                  <label className="avatar-upload full"><span className="avatar-upload-preview">{avatarPreview ? <Image src={avatarPreview} alt="Prévia da foto" width={52} height={52} unoptimized /> : '＋'}</span><span><b>Foto ou logo do perfil</b><small>PNG, JPG ou WebP · até 750 KB</small></span><input accept="image/png,image/jpeg,image/webp" name="avatar" onChange={(event) => { const file = event.target.files?.[0]; setAvatarPreview(file ? URL.createObjectURL(file) : ''); }} type="file" /></label>
+                  <label className="avatar-upload full"><span className="avatar-upload-preview">{avatarPreview ? <Image src={avatarPreview} alt="Prévia da foto" width={52} height={52} unoptimized /> : '＋'}</span><span><b>Foto ou logo do perfil <em>opcional</em></b><small>PNG, JPG ou WebP · até 750 KB</small></span><input accept="image/png,image/jpeg,image/webp" name="avatar" onChange={(event) => { const file = event.target.files?.[0]; setAvatarPreview(file ? URL.createObjectURL(file) : ''); }} type="file" /></label>
                   <div className="checkout-row">
                     <label>Nome no ranking<input defaultValue={formSeed.name} name="name" required minLength={2} maxLength={60} placeholder="Sua marca ou projeto" /></label>
                     <label>{text.category}<select defaultValue={formSeed.category} name="category" required><option value="" disabled>Selecione</option><option value="Creators">Criadores</option><option value="Products">Produtos</option><option value="Tools">Ferramentas</option><option value="Brands">Marcas</option><option value="Services">Serviços</option><option value="Communities">Comunidades</option></select></label>
@@ -446,16 +553,16 @@ export default function Home() {
                 </div>
 
                 <div className={`checkout-step full ${checkoutStep === 2 ? 'active' : ''}`} data-checkout-step="payment">
-                  <div className="checkout-summary"><div><small>Você está impulsionando</small><strong>{checkoutPreview?.name || 'Seu perfil'} <span>{checkoutPreview?.handle}</span></strong></div><b>{currency(checkoutPreview?.amountMinor || 500, 'BRL', 'br')}</b></div>
+                  <div className="checkout-summary"><div><small>Alvo no ranking</small><strong>{checkoutPreview?.name || 'Seu perfil'} <span>{checkoutPreview?.handle}</span></strong></div><b>{currency(checkoutPreview?.amountMinor || 500, 'BRL', 'br')}</b></div>
                   <p className="payment-data-title">Dados para gerar o Pix <span>Pagamento seguro pela BravoPay</span></p>
                   <label className="full">Nome completo<input autoComplete="name" name="buyerName" required minLength={5} placeholder="Como aparece no CPF" /></label>
                   <div className="checkout-row">
-                    <label>CPF ou CNPJ<input autoComplete="off" inputMode="numeric" name="document" required placeholder="Somente números" /></label>
+                    <label>CPF ou CNPJ<input autoComplete="off" inputMode="numeric" maxLength={18} name="document" onChange={(event) => { event.currentTarget.value = formatBrazilianDocument(event.currentTarget.value); }} required placeholder="000.000.000-00" /></label>
                     <label>E-mail para confirmação<input autoComplete="email" name="contactEmail" required type="email" placeholder="voce@email.com" /></label>
                   </div>
                   {submission === 'error' && <p className="form-error">{errorMessage}</p>}
-                  <p className="form-disclosure">Seu perfil só sobe após o pagamento ser confirmado. Se outra pessoa superar seu lance depois, não há reembolso automático.</p>
-                  <div className="checkout-actions"><button className="checkout-back" onClick={() => { setSubmission('idle'); setErrorMessage(''); setCheckoutStep(1); }} type="button">← Voltar</button><button className="submit-button" disabled={submission === 'sending'} type="submit">{submission === 'sending' ? text.sending : `Gerar Pix`}<span>↗</span></button></div>
+                  <p className="form-disclosure">Seu perfil só sobe após o pagamento ser confirmado. Ao gerar o Pix, você declara ter lido as <a href="/rules" target="_blank">regras</a> e a <a href="/privacy" target="_blank">política de privacidade</a>. Ser ultrapassado depois não gera reembolso automático.</p>
+                  <div className="checkout-actions"><button className="checkout-back" onClick={() => { setSubmission('idle'); setErrorMessage(''); setCheckoutStep(1); }} type="button">← Voltar</button><button className="submit-button" disabled={submission === 'sending'} type="submit">{submission === 'sending' ? text.sending : `Gerar Pix seguro`}<span>↗</span></button></div>
                 </div>
               </> : <>
                 <label>{text.name}<input name="name" required minLength={2} maxLength={60} /></label>

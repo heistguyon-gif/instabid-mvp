@@ -1,11 +1,12 @@
 import { applyVerifiedTransaction, getPayment } from '@/db/runtime';
 import { BravopayError, getBravopayTransaction } from '@/lib/bravopay';
+import { isPaymentId } from '@/lib/payment';
 
 type PageProps = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: PageProps) {
   const { id } = await params;
-  if (!/^pay_[a-f0-9]{32}$/i.test(id)) return Response.json({ error: 'invalid_payment' }, { status: 400 });
+  if (!isPaymentId(id)) return Response.json({ error: 'invalid_payment' }, { status: 400 });
   const payment = await getPayment(id);
   if (!payment) return Response.json({ error: 'payment_not_found' }, { status: 404 });
   let current = payment;

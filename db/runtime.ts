@@ -128,6 +128,7 @@ export async function ensureDatabase() {
     await db.prepare('ALTER TABLE listings ADD COLUMN image_url TEXT').run();
   }
   await db.batch([
+    db.prepare('DELETE FROM request_limits WHERE expires_at <= ?').bind(new Date().toISOString()),
     db.prepare("DELETE FROM click_events WHERE listing_id IN (SELECT listing_id FROM boosts WHERE provider = 'demo')"),
     db.prepare("DELETE FROM listings WHERE placement_type != 'launch_partner' AND id IN (SELECT listing_id FROM boosts WHERE provider = 'demo')"),
     db.prepare("DELETE FROM boosts WHERE provider = 'demo'"),
@@ -281,15 +282,18 @@ export type PaymentRecord = {
   pixCopyPaste: string | null;
   expiresAt: string | null;
   lastCheckedAt: string | null;
+  listingName?: string;
+  listingHandle?: string;
 };
 
 export async function getPayment(id: string) {
   if (isVercel) return null;
   const db = await ensureDatabase();
-  return db.prepare(`SELECT id, listing_id AS listingId, season_id AS seasonId,
-      provider_payment_id AS providerPaymentId, amount_minor AS amountMinor, currency, status,
-      pix_copy_paste AS pixCopyPaste, expires_at AS expiresAt, last_checked_at AS lastCheckedAt
-    FROM payments WHERE id = ?`).bind(id).first<PaymentRecord>();
+  return db.prepare(`SELECT p.id, p.listing_id AS listingId, p.season_id AS seasonId,
+      p.provider_payment_id AS providerPaymentId, p.amount_minor AS amountMinor, p.currency, p.status,
+      p.pix_copy_paste AS pixCopyPaste, p.expires_at AS expiresAt, p.last_checked_at AS lastCheckedAt,
+      l.name AS listingName, l.handle AS listingHandle
+    FROM payments p JOIN listings l ON l.id = p.listing_id WHERE p.id = ?`).bind(id).first<PaymentRecord>();
 }
 
 export async function createPaymentAttempt(input: {
@@ -335,6 +339,7 @@ export async function applyVerifiedTransaction(transaction: {
   if (transaction.externalReference && transaction.externalReference !== payment.id) throw new Error('payment_reference_mismatch');
   const now = new Date().toISOString();
   if (transaction.status === 'paid') {
+    if (payment.status === 'refunded') return getPayment(payment.id);
     await db.batch([
       db.prepare(`UPDATE payments SET provider_payment_id = ?, status = 'confirmed', confirmed_at = ? WHERE id = ?`)
         .bind(transaction.id, now, payment.id),
@@ -348,6 +353,11 @@ export async function applyVerifiedTransaction(transaction: {
     await db.batch([
       db.prepare("UPDATE payments SET status = 'refunded' WHERE id = ?").bind(payment.id),
       db.prepare("UPDATE boosts SET status = 'refunded' WHERE provider = 'bravopay' AND provider_payment_id = ?").bind(transaction.id),
+      db.prepare(`UPDATE listings SET
+          status = CASE WHEN id IN ('partner-nexoflow', 'partner-instabid') THEN 'active' ELSE 'refunded' END,
+          placement_type = CASE WHEN id IN ('partner-nexoflow', 'partner-instabid') THEN 'launch_partner' ELSE placement_type END
+        WHERE id = ? AND NOT EXISTS (SELECT 1 FROM boosts WHERE listing_id = ? AND status = 'confirmed')`)
+        .bind(payment.listingId, payment.listingId),
     ]);
   } else if (transaction.status === 'failed') {
     await db.prepare("UPDATE payments SET status = 'failed' WHERE id = ? AND status != 'confirmed'").bind(payment.id).run();
